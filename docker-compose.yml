@@ -1,0 +1,75 @@
+# Copyright (c) 2021 Intel Corporation.
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+version: '3.6'
+
+services:
+  ia_eiibase:
+    build:
+      context: $PWD/../common
+      dockerfile: $PWD/../common/dockerfiles/Dockerfile.eiibase
+      args:
+        UBUNTU_IMAGE_VERSION: ${UBUNTU_IMAGE_VERSION}
+        EII_VERSION: ${EII_VERSION}
+        HOST_TIME_ZONE: ${HOST_TIME_ZONE}
+        GO_VERSION: ${GO_VERSION}
+        PYTHON_VERSION: ${PYTHON_VERSION}
+    image: ia_eiibase:${EII_VERSION}
+  ## Define deployment-tool-backend service
+  ia_deployment_tool_backend:
+    depends_on:
+      - ia_eiibase
+    build:
+      context: $PWD/../deployment-tool-backend
+      dockerfile: $PWD/../deployment-tool-backend/Dockerfile
+      args:
+        EII_VERSION: ${EII_VERSION}
+        CMAKE_INSTALL_PREFIX: ${EII_INSTALL_PATH}
+        UBUNTU_IMAGE_VERSION: ${UBUNTU_IMAGE_VERSION}
+    read_only: true
+    image: ia_deployment_tool_backend:${EII_VERSION}
+    container_name: ia_deployment_tool_backend
+    hostname: ia_deployment_tool_backend
+    restart: unless-stopped
+    ipc: "none"
+    security_opt:
+    - no-new-privileges
+    healthcheck:
+      test: ["CMD-SHELL", "exit", "0"]
+      interval: 5m
+    environment:
+      AppName: "deployment-tool-backend"
+      DEV_MODE: ${DEV_MODE}
+      PROFILING_MODE: ${PROFILING_MODE}
+      no_proxy: ${eii_no_proxy}
+      NO_PROXY: ${eii_no_proxy}
+      CertType: "zmq,pem"
+      DEPLOYMENT_TOOL_BACKEND_PORT: 5100
+    networks:
+      - eii
+    ports:
+        - 5100:5100
+    volumes:
+      - $PWD/../:/app/IEdgeInsights:rw
+networks:
+  eii:
+    external:
+      name: eii
+

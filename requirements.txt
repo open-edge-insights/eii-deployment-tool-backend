@@ -1,0 +1,5 @@
+flask==2.0.1
+flask_cors==3.0.10
+ruamel.yaml==0.16.10
+pyyaml==5.4
+six==1.16.0
