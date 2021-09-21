@@ -31,7 +31,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip3 install --user -r requirements.txt
 
-COPY . .
+COPY ./eii-deployment-tool-backend.py /app/
 
 FROM ubuntu:$UBUNTU_IMAGE_VERSION as runtime
 

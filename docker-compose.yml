@@ -62,14 +62,9 @@ services:
       NO_PROXY: ${eii_no_proxy}
       CertType: "zmq,pem"
       DEPLOYMENT_TOOL_BACKEND_PORT: 5100
-    networks:
-      - eii
+      # Available log levels: ERROR, INFO, DEBUG
+      LOG_LEVEL: "INFO"
     ports:
         - 5100:5100
     volumes:
       - $PWD/../:/app/IEdgeInsights:rw
-networks:
-  eii:
-    external:
-      name: eii
-

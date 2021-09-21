@@ -24,10 +24,18 @@ set -a
 source ../build/.env
 set +a
 mkdir -p ../build/projects
+
 if [ "$1" ==  "--build" -o "$1" == "-b" ]; then
     docker-compose build $2
+    docker-compose up -d
+elif [ "$1" ==  "--restart" -o "$1" == "-r" ]; then
+    docker-compose down
+    docker-compose up -d
+elif [ "$1" ==  "--down" -o "$1" == "-d" ]; then
+    docker-compose down
 elif [ "$1" != "" ]; then
     echo "Error: unexpected param: $1"
     exit 
+else
+    docker-compose up -d
 fi
-docker-compose up -d
