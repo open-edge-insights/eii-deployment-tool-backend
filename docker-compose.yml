@@ -37,8 +37,8 @@ services:
     depends_on:
       - ia_eiibase
     build:
-      context: $PWD/../deployment-tool-backend
-      dockerfile: $PWD/../deployment-tool-backend/Dockerfile
+      context: $PWD
+      dockerfile: $PWD/Dockerfile
       args:
         EII_VERSION: ${EII_VERSION}
         CMAKE_INSTALL_PREFIX: ${EII_INSTALL_PATH}
