@@ -34,6 +34,7 @@ usecases
 
 * **Project Load**
 * **Project Store**
+* **Get project list**
 
 
 """
@@ -201,43 +202,86 @@ class Util:
         return status, error_detail
 
 
-def do_load_project(name):
-    """Returns the config data for an existing project
+    def scan_dir(self, dir_path):
+        """Returns the list of files and directories in the specified path
 
-    :param name: name for the project
-    :type name: str
-    :return: status of operation
-    :rtype: bool
-    :return: error description
-    :rtype: str
-    :return: config data
-    :rtype: dict
-    """
-    path = util.EII_PROJECTS_PATH + name + util.JSON_EXT
-    return util.get_consolidated_config(path)
+        :param dir_path: path to directory
+        :type dir_path: str
+        :return: list of files and directories
+        :rtype: dict[(str,list[str])
+        """
+        file_list = {"files": [], "dirs": []}
+        try:
+            for (_, dirnames, filenames) in os.walk(dir_path):
+                file_list["files"].extend(filenames)
+                file_list["dirs"].extend(dirnames)
+                break
+        except Exception as e:
+            error_detail = "failed to list files at {}: {}".format(dir_path, e)
+            self.logger.error(error_detail)
+            return False, error_detail, None
+        return True, "", file_list
 
 
-def do_store_project(name, replace = True):
-    """Create config file for the current unsaved project
+class Project():
+    def do_load_project(name):
+        """Returns the config data for an existing project
 
-    :param name: name for the project
-    :type name: str
-    :param replace: Whether replace existing file
-    :type replace: bool
-    :return: status of operation
-    :rtype: bool
-    :return: error description
-    :rtype: str
-    """
-    status, error_detail, config = util.get_consolidated_config()
-    if status:
+        :param name: name for the project
+        :type name: str
+        :return: status of operation
+        :rtype: bool
+        :return: error description
+        :rtype: str
+        :return: config data
+        :rtype: dict
+        """
         path = util.EII_PROJECTS_PATH + name + util.JSON_EXT
-        if replace is False and os.path.isfile(path):
-            util.logger.error("Error: destination file {} already exists!".format(path))
-            status = False
+        return util.get_consolidated_config(path)
+
+
+    def do_store_project(name, replace = True):
+        """Create config file for the current unsaved project
+
+        :param name: name for the project
+        :type name: str
+        :param replace: Whether replace existing file
+        :type replace: bool
+        :return: status of operation
+        :rtype: bool
+        :return: error description
+        :rtype: str
+        """
+        status, error_detail, config = util.get_consolidated_config()
+        if status:
+            path = util.EII_PROJECTS_PATH + name + util.JSON_EXT
+            if replace is False and os.path.isfile(path):
+                util.logger.error("Error: destination file {} already exists!".format(path))
+                status = False
+            else:
+                status, error_detail = util.store_consolidated_config(config, path)
+        return status, error_detail
+
+
+    def do_list_projects():
+        """Get list of project files
+
+        :param name: name for the project
+        :type name: string
+        :param replace: Whether replace existing file
+        :type replace: boolean
+        :return: status
+        :rtype: boolean
+        :return: list of projects
+        :rtype: list of str
+        """
+        status = False
+        status, error_detail, dir_info = util.scan_dir(util.EII_PROJECTS_PATH)
+        if status:
+            projects = [ p[:-5] for p in dir_info["files"] if p.endswith(util.JSON_EXT) ]
         else:
-            status, error_detail = util.store_consolidated_config(config, path)
-    return status, error_detail
+            projects = None
+        return status, error_detail, projects
 
 
 def make_response_json(status, data, error_detail):
@@ -296,7 +340,7 @@ class Response(BaseModel):
     responses={200: {"model": Response}}
 )
 def project_load(param: ProjectInfo):
-    status, error_detail, info = do_load_project(param.name)
+    status, error_detail, info = Project.do_load_project(param.name)
     return make_response_json(status, json.dumps(info), error_detail)
 
 
@@ -305,8 +349,17 @@ def project_load(param: ProjectInfo):
     responses={200: {"model": Response}}
 )
 def project_store(param: ProjectInfo):
-    status, error_detail = do_store_project(param.name)
+    status, error_detail = Project.do_store_project(param.name)
     return make_response_json(status, " ", error_detail)
+
+
+@app.get('/eii/ui/project/list',
+    response_model=Response,
+    responses={200: {"model": Response}}
+)
+def project_list():
+    status, error_detail, projects = Project.do_list_projects()
+    return make_response_json(status, json.dumps(projects), error_detail)
 
 
 util = Util()
