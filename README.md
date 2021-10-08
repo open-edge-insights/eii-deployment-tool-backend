@@ -17,7 +17,7 @@
     * **To simply run the container (without building)**:
 
       ```shell
-      $ cd [WORKDIR]/IEdgeInsight/deployment-tool-backend
+      $ cd [WORKDIR]/IEdgeInsights/DeploymentToolBackend
       $ ./run.sh
       ```
 

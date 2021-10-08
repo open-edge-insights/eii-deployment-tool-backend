@@ -21,7 +21,10 @@
 import sys
 import os
 import json
+import subprocess as sp
 import logging
+from shlex import shlex
+from typing import List
 import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
@@ -36,6 +39,9 @@ usecases
 * **Project Store**
 * **Get project list**
 
+## Config
+
+* **Generate Config**
 
 """
 app = FastAPI(
@@ -54,6 +60,9 @@ class Util:
     IE_DIR = "/app/IEdgeInsights/"
     EII_CONFIG_PATH = IE_DIR + "build/provision/config/eii_config.json"
     EII_PROJECTS_PATH = IE_DIR + "build/projects/"
+    EII_BUILD_PATH = IE_DIR + "build"
+    TEMP_USECASE_FILE_PATH = EII_BUILD_PATH + "/.usecasex.yml"
+    LOGFILE = IE_DIR + "/build/console.log"
     JSON_EXT = ".json"
 
     def __init__(self):
@@ -73,8 +82,8 @@ class Util:
         else:
             logging_format = "%(message)s"
             logging_level = logging.INFO
-            error = "Invalid log level {}. Resetting log level to INFO" \
-                    .format(env_log_level)
+            error = "Invalid log level {}. Resetting log level to INFO".format(
+                    env_log_level)
 
         logging.basicConfig(level=logging_level, format=logging_format)
         self.logger = logging.getLogger(__name__)
@@ -102,9 +111,9 @@ class Util:
                 data = filehandle.read()
             if isinstance(data, bytearray) or isinstance(data, bytes):
                 data = data.decode('utf-8')
-        except Exception as e:
+        except Exception as exception:
             status = False
-            error_detail = "failed to read file: [{}]: {}".format(path, e)
+            error_detail = "failed to read file: [{}]: {}".format(path, exception)
         return status, error_detail, data
 
 
@@ -140,9 +149,9 @@ class Util:
                     status = False
                     error_detail = "Internal error: Unhandled type: {}".format(type(data))
                     self.logger.error(error_detail)
-        except Exception as e:
+        except Exception as exception:
             status = False
-            error_detail = "Failed to write file: [{}]: {}".format(path, e)
+            error_detail = "Failed to write file: [{}]: {}".format(path, exception)
             self.logger.error(error_detail)
 
         return status, error_detail
@@ -170,9 +179,10 @@ class Util:
             if status:
                 eii_config = json.loads(eii_config_str)
 
-        except Exception as e:
+        except Exception as exception:
             status = False
-            error_detail = "exception while reading eii_config.json: {}".format(e)
+            error_detail = "exception while reading eii_config.json: {}".format(
+                    exception)
             self.logger.error(error_detail)
 
         return status, error_detail, eii_config
@@ -195,11 +205,36 @@ class Util:
             path = util.EII_CONFIG_PATH
         try:
             status, error_detail = self.store_file(path, json.dumps(config, indent=4), True)
-        except Exception as e:
-            error_detail = "exception while writing {}: {}".format(path, e)
+        except Exception as exception:
+            error_detail = "exception while writing {}: {}".format(path, exception)
             self.logger.error(error_detail)
 
         return status, error_detail
+
+
+    def shell(self, cmd):
+        """Execute a shell command and return the output
+        :param cmd: shell command
+        "type cmd: str
+        :return: status of operation
+        :rtype: bool
+        :return: error description
+        :rtype: str
+        :return: command output
+        :rtype: str
+        """
+        out = ""
+        status = False
+        error_detail = ""
+        try:
+            out = sp.check_output(
+                     shlex(cmd),
+                     shell=False)
+            status = True
+        except Exception as exception:
+            error_detail = "error while executing {}: {}".format(cmd, exception)
+            self.logger.error(error_detail)
+        return status, error_detail, out
 
 
     def scan_dir(self, dir_path):
@@ -207,20 +242,53 @@ class Util:
 
         :param dir_path: path to directory
         :type dir_path: str
+        :return: status
+        :rtype: bool
+        :return: error description
+        :rtype: str
         :return: list of files and directories
         :rtype: dict[(str,list[str])
         """
+        status = True
+        error_detail = ""
         file_list = {"files": [], "dirs": []}
         try:
             for (_, dirnames, filenames) in os.walk(dir_path):
                 file_list["files"].extend(filenames)
                 file_list["dirs"].extend(dirnames)
                 break
-        except Exception as e:
-            error_detail = "failed to list files at {}: {}".format(dir_path, e)
+        except Exception as exception:
+            error_detail = "failed to list files at {}: {}".format(dir_path, exception)
             self.logger.error(error_detail)
-            return False, error_detail, None
-        return True, "", file_list
+            status = False
+        return status, error_detail, file_list
+
+
+    def create_usecase_yml_file(self, components, path):
+        """Creates a usecase yml file
+
+        :param components: list of component names
+        :type components: [str]
+        :param path: path to usecase file
+        :type path: str
+        :return: status
+        :rtype: bool
+        :return: error description
+        :rtype: str
+        """
+        status = True
+        error_detail = ""
+        try:
+            with open(path, "w") as fyml:
+                fyml.write("AppContexts:\n")
+                for component in components:
+                    fyml.write("- {}\n".format(component))
+        except Exception as exception:
+            error_detail = "exception while creating usecase yml file: {}".format(
+                    exception)
+            self.logger.error(error_detail)
+            status = False
+        return status, error_detail
 
 
 class Project():
@@ -284,6 +352,58 @@ class Project():
         return status, error_detail, projects
 
 
+def do_generate_config(components, instances):
+    """Generate the consolidated config file
+
+    :param components: list of component names
+    :type name: [str]
+    :param instances: no. of instances to generate
+    :type instances: int
+    :return: status of operation
+    :rtype: bool
+    :return: error description
+    :rtype: str
+    """
+    status, error_detail = util.create_usecase_yml_file(components, util.TEMP_USECASE_FILE_PATH)
+    if not status:
+        return False, error_detail, None
+    vi = False
+    for component in components:
+        if component.find("VideoIngestion") == 0:
+            vi = True
+            break
+    if instances > 1 and vi is False:
+        error_detail = "unsupported multi-instance configuration"
+        util.logger.error(error_detail)
+        return False, error_detail, None
+
+    os.chdir(util.EII_BUILD_PATH)
+    # Save old config
+    status, error_detail, old_config = util.get_consolidated_config()
+    #print(old_config)
+    if instances > 1:
+        status, error_detail, out = util.shell('python3 builder.py -f {} -v{}' \
+                .format(util.TEMP_USECASE_FILE_PATH, instances))
+    else:
+        status, error_detail, out = util.shell('python3 builder.py -f {}' \
+                .format(util.TEMP_USECASE_FILE_PATH))
+    util.store_file(util.LOGFILE, out, True)
+    status, error_detail, new_config = util.get_consolidated_config()
+    if not status:
+        error_detail = "error: failed to generate eii_config"
+        util.logger.error(error_detail)
+        return False, error_detail, None
+
+    # Apply saved config to the new config
+    for component in old_config:
+        util.logger.error("Component: {}".format(component))
+        if component in new_config:
+            new_config[component] = old_config[component]
+
+    status, error_detail = util.store_consolidated_config(new_config)
+    return status, error_detail, new_config
+
+
 def make_response_json(status, data, error_detail):
     """Common function for creating the response object for all the APIs
 
@@ -322,6 +442,10 @@ def make_response_json(status, data, error_detail):
 class ProjectInfo(BaseModel):
     name: str = Field(..., title="Project name", max_length=128)
 
+class ComponentInfo(BaseModel):
+    names: List[str] = Field(..., title="Component names", max_length=64, min_items=1, max_items=96)
+    instance_count: int = Field(..., title="Number of instances", gt=0, lt=33)
+
 class ResponseStatus(BaseModel):
     status: bool = Field(..., title="Error status")
     error_detail: str = Field(..., title="Error detail")
@@ -337,7 +461,8 @@ class Response(BaseModel):
 
 @app.post('/eii/ui/project/load',
     response_model=Response,
-    responses={200: {"model": Response}}
+    responses={200: {"model": Response}},
+    description="Returns specified project config data"
 )
 def project_load(param: ProjectInfo):
     status, error_detail, info = Project.do_load_project(param.name)
@@ -346,7 +471,8 @@ def project_load(param: ProjectInfo):
 
 @app.post('/eii/ui/project/store',
     response_model=Response,
-    responses={200: {"model": Response}}
+    responses={200: {"model": Response}},
+    description="Saves current project config data to specified file"
 )
 def project_store(param: ProjectInfo):
     status, error_detail = Project.do_store_project(param.name)
@@ -355,11 +481,24 @@ def project_store(param: ProjectInfo):
 
 @app.get('/eii/ui/project/list',
     response_model=Response,
-    responses={200: {"model": Response}}
+    responses={200: {"model": Response}},
+    description="Returns list of all the saved project config data"
 )
 def project_list():
     status, error_detail, projects = Project.do_list_projects()
     return make_response_json(status, json.dumps(projects), error_detail)
+
+
+@app.post('/eii/ui/config/generate',
+    response_model=Response,
+    responses={200: {"model": Response}},
+    description="Generates default config for the specified components"
+            " and returns the same"
+)
+def generate_config(param: ComponentInfo):
+    status, error_detail, config = do_generate_config(param.names,
+            param.instance_count)
+    return make_response_json(status, json.dumps(config), error_detail)
 
 
 util = Util()

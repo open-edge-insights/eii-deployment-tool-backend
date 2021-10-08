@@ -31,7 +31,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip3 install --user -r requirements.txt
 
-COPY ./eii-deployment-tool-backend.py /app/
+COPY ./eii_deployment_tool_backend.py /app/
 
 FROM ubuntu:$UBUNTU_IMAGE_VERSION as runtime
 
@@ -51,4 +51,4 @@ COPY --from=builder /root/.local/lib .local/lib
 COPY --from=builder /app .
 
 HEALTHCHECK NONE
-ENTRYPOINT python3 ./eii-deployment-tool-backend.py $DEPLOYMENT_TOOL_BACKEND_PORT
+ENTRYPOINT python3 eii_deployment_tool_backend.py $DEPLOYMENT_TOOL_BACKEND_PORT
