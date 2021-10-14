@@ -43,6 +43,8 @@ services:
         EII_VERSION: ${EII_VERSION}
         CMAKE_INSTALL_PREFIX: ${EII_INSTALL_PATH}
         UBUNTU_IMAGE_VERSION: ${UBUNTU_IMAGE_VERSION}
+        # Specify users credentials
+        CREDS: '[["admin","admin@123"]]'    
     read_only: true
     image: ia_deployment_tool_backend:${EII_VERSION}
     container_name: ia_deployment_tool_backend

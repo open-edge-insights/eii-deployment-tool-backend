@@ -24,18 +24,27 @@ import time
 import json
 import subprocess as sp
 import logging
-from shlex import shlex
+import secrets
+import shlex
 from threading import Thread, Lock
 from typing import List, Optional
 import cv2
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, HTTPException, Depends
+from fastapi import status as HTTPStatus
+from fastapi.security import APIKeyCookie
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
 DESCRIPTION = """
 EII Deployment Tool Backend provides REST APIs to Configure, build and deploy your
 usecases
+
+## Authentication
+
+* **Login**
+* **Logout**
 
 ## Project
 
@@ -59,6 +68,7 @@ app = FastAPI(
     description = DESCRIPTION,
     version = "0.0.1"
 )
+session_cookie = APIKeyCookie(name="session")
 
 class Util:
     """
@@ -237,7 +247,7 @@ class Util:
         error_detail = ""
         try:
             out = sp.check_output(
-                     shlex(cmd),
+                     shlex.split(cmd),
                      shell=False)
             status = True
         except Exception as exception:
@@ -298,6 +308,104 @@ class Util:
             self.logger.error(error_detail)
             status = False
         return status, error_detail
+
+
+class Authentication():
+    """
+    Class for grouping authentication related functions and data
+    """
+    tokens = {}
+    def get_user_credentials(username):
+        """Returns the login credentials for the give username
+
+        :param username: Username
+        :type username: str
+        :return: user login credentails
+        "rtype: ()
+        """
+        for tup in CREDS:
+            if username in tup[0]:
+                return tup
+        return None
+
+
+    def validate_token(token: str = Depends(session_cookie)):
+        """Checks whether the given token is valid
+
+        :param token: session token returned by /eii/ui/login API
+        :type token: str
+        :return: Whether token is valid or not
+        :rtype: bool
+        """
+        if token not in Authentication.tokens:
+            raise HTTPException(
+                status_code=HTTPStatus.HTTP_403_FORBIDDEN,
+                detail="Invalid authentication"
+            )
+        return token
+
+
+class Project():
+    def do_load_project(name):
+        """Returns the config data for an existing project
+
+        :param name: name for the project
+        :type name: str
+        :return: status of operation
+        :rtype: bool
+        :return: error description
+        :rtype: str
+        :return: config data
+        :rtype: dict
+        """
+        path = util.EII_PROJECTS_PATH + name + util.JSON_EXT
+        status, error_detail, config = util.get_consolidated_config(path)
+        if status is False:
+            util.logger.error("Failed to load project {}: {}".format(name, error_detail))
+        return status, error_detail, config
+
+
+    def do_store_project(name, replace = True):
+        """Create config file for the current unsaved project
+
+        :param name: name for the project
+        :type name: str
+        :param replace: Whether replace existing file
+        :type replace: bool
+        :return: status of operation
+        :rtype: bool
+        :return: error description
+        :rtype: str
+        """
+        status, error_detail, config = util.get_consolidated_config()
+        if status:
+            path = util.EII_PROJECTS_PATH + name + util.JSON_EXT
+            if replace is False and os.path.isfile(path):
+                util.logger.error("Error: destination file {} already exists!".format(path))
+                status = False
+            else:
+                status, error_detail = util.store_consolidated_config(config, path)
+        return status, error_detail
+
+
+    def do_list_projects():
+        """Get list of project files
+
+        :param name: name for the project
+        :type name: string
+        :param replace: Whether replace existing file
+        :type replace: boolean
+        :return: status
+        :rtype: boolean
+        :return: list of projects
+        :rtype: list of str
+        """
+        status, error_detail, dir_info = util.scan_dir(util.EII_PROJECTS_PATH)
+        if status:
+            projects = [ p[:-5] for p in dir_info["files"] if p.endswith(util.JSON_EXT) ]
+        else:
+            projects = None
+        return status, error_detail, projects
 
 
 class Project():
@@ -582,9 +690,11 @@ def make_response_json(status, data, error_detail):
     """
 
     if status is False or data in (None, ""):
-        data = {}
+        data = ""
     if status:
         error_detail = ""
+        if not isinstance(data, str):
+            data = json.dumps(data)
 
     #TBD
     console_log = ""
@@ -605,6 +715,23 @@ def make_response_json(status, data, error_detail):
 
 class ProjectInfo(BaseModel):
     name: str = Field(..., title="Project name", max_length=128)
+    class Config:
+        schema_extra = {
+            "example": {
+                "name": "my_new_usecase"
+            }
+        }
+
+class Credentials(BaseModel):
+    username: str = Field(..., title="User name", max_length=32)
+    password: str = Field(..., title="Password", max_length=32)
+    class Config:
+        schema_extra = {
+            "example": {
+                "username": "admin",
+                "password": "admin@123"
+            }
+        }
 
 class CameraInfo(BaseModel):
     devices: List[str] = Field(..., title="Camera devices list",
@@ -617,12 +744,19 @@ class CameraInfo(BaseModel):
                 "devices": ["/dev/video0", "/dev/video1", "1", "2"],
                 "width": 320,
                 "height": 240
-                }
             }
+        }
 
 class ComponentInfo(BaseModel):
     names: List[str] = Field(..., title="Component names", max_length=64, min_items=1, max_items=96)
     instance_count: int = Field(..., title="Number of instances", gt=0, lt=33)
+    class Config:
+        schema_extra = {
+            "example": {
+                "names": ["VideoIngestion", "VideoAnalytics"],
+                "instance_count": 2
+            }
+        }
 
 class ResponseStatus(BaseModel):
     status: bool = Field(..., title="Error status")
@@ -633,6 +767,9 @@ class Response(BaseModel):
     data: str = Field(..., title="Response Data")
     status_info: ResponseStatus = Field(..., title="Response Status")
 
+class Response403(BaseModel):
+    detail: str
+
 class Response204(BaseModel):
     detail: str
 
@@ -640,14 +777,63 @@ class Response204(BaseModel):
 # API defnitions
 #
 
+@app.post('/eii/ui/login',
+    response_model=Response,
+    responses = {200: {"model": Response},
+                 403: {"model": Response403}},
+    description="Authenticates a user and creates secure session"
+)
+def login(creds: Credentials):
+    user_cred = Authentication.get_user_credentials(creds.username)
+    if user_cred is None or user_cred[1] != creds.password:
+        raise HTTPException(
+            status_code=HTTPStatus.HTTP_403_FORBIDDEN,
+            detail="Invalid user or password")
+    token = secrets.token_urlsafe(16)
+    Authentication.tokens[token] = creds.username
+    response = JSONResponse(
+                    content=make_response_json(
+                        True,
+                        json.dumps(token),
+                        ""
+                    )
+               )
+    response.set_cookie("session",
+                        token,
+                        max_age=1800,
+                        expires=1800)
+    return response
+
+
+@app.get("/eii/ui/logout",
+    response_model=Response,
+    responses = {200: {"model": Response},
+                 403: {"model": Response403}},
+    description="Logs out a user and delete the session"
+)
+def logout(token: str = Depends(Authentication.validate_token)):
+    del Authentication.tokens[token]
+    response = JSONResponse(
+                    content=make_response_json(
+                        True,
+                        "Successfully logged out",
+                        ""
+                    )
+               )
+    response.delete_cookie("session")
+    return response
+
+
 @app.post('/eii/ui/project/load',
     response_model=Response,
     responses={200: {"model": Response}},
     description="Returns specified project config data"
 )
-def project_load(param: ProjectInfo):
-    status, error_detail, info = Project.do_load_project(param.name)
-    return make_response_json(status, json.dumps(info), error_detail)
+def project_load(param: ProjectInfo, token: str=Depends(
+        Authentication.validate_token)):
+    _ = token
+    status, error_detail, config = Project.do_load_project(param.name)
+    return make_response_json(status, config, error_detail)
 
 
 @app.post('/eii/ui/project/store',
@@ -655,7 +841,9 @@ def project_load(param: ProjectInfo):
     responses={200: {"model": Response}},
     description="Saves current project config data to specified file"
 )
-def project_store(param: ProjectInfo):
+def project_store(param: ProjectInfo, token: str=Depends(
+        Authentication.validate_token)):
+    _ = token
     status, error_detail = Project.do_store_project(param.name)
     return make_response_json(status, " ", error_detail)
 
@@ -665,9 +853,12 @@ def project_store(param: ProjectInfo):
     responses={200: {"model": Response}},
     description="Returns list of all the saved project config data"
 )
+# TODO:Disable authorization check for this API, as the same is not yet
+# implemented in frontend
+#def project_list(token: str=Depends(Authentication.validate_token)):
 def project_list():
     status, error_detail, projects = Project.do_list_projects()
-    return make_response_json(status, json.dumps(projects), error_detail)
+    return make_response_json(status, projects, error_detail)
 
 
 @app.post('/eii/ui/config/generate',
@@ -676,10 +867,12 @@ def project_list():
     description="Generates default config for the specified components"
             " and returns the same"
 )
-def generate_config(param: ComponentInfo):
+def generate_config(param: ComponentInfo,
+        token: str=Depends(Authentication.validate_token)):
+    _ = token
     status, error_detail, config = do_generate_config(param.names,
             param.instance_count)
-    return make_response_json(status, json.dumps(config), error_detail)
+    return make_response_json(status, config, error_detail)
 
 
 @app.post('/eii/ui/camera/{action}',
@@ -687,7 +880,10 @@ def generate_config(param: ComponentInfo):
     responses={200: {"model": Response}},
     description="Starts and stops the specified camera devices"
 )
-def camera_operate(action: str, cameraInfo: CameraInfo):
+def camera_operate(action: str,
+        cameraInfo: CameraInfo,
+        token: str=Depends(Authentication.validate_token)):
+    _ = token
     supported_actions = ["start", "stop", "status"]
 
     if action not in supported_actions:
@@ -718,7 +914,7 @@ def camera_operate(action: str, cameraInfo: CameraInfo):
             response = make_response_json(False, "", "No camera devices specified")
         else:
             response = make_response_json(
-                    True, json.dumps(camera.get_camera_status()),"")
+                    True, camera.get_camera_status(),"")
     elif action == "stop":
         camera.mutex.acquire()
         devices = cameraInfo.devices
@@ -742,12 +938,12 @@ def camera_operate(action: str, cameraInfo: CameraInfo):
                 camera.mutex.acquire()
                 del camera.device_threads[device]
                 camera.mutex.release()
-        response = make_response_json(True, json.dumps(camera.get_camera_status()), "")
+        response = make_response_json(True, camera.get_camera_status(), "")
     elif action == "status":
         camera.mutex.acquire()
         devices = cameraInfo.devices
         camera.mutex.release()
-        response = make_response_json(True, json.dumps(camera.get_camera_status(devices)), "")
+        response = make_response_json(True, camera.get_camera_status(devices), "")
     return response
 
 
@@ -755,7 +951,9 @@ def camera_operate(action: str, cameraInfo: CameraInfo):
     response_class=StreamingResponse,
     description="Stream from the specified camera device"
 )
-async def camera_stream(device: str):
+async def camera_stream(device: str,
+        token: str=Depends(Authentication.validate_token)):
+    _ = token
     # make a safe copy of the global dict
     camera.mutex.acquire()
     threads = camera.device_threads.copy()
@@ -774,9 +972,12 @@ util = Util()
 camera = Camera()
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2 or int(sys.argv[1]) <= 0:
+    if len(sys.argv) != 3 or int(sys.argv[1]) <= 0:
         util.logger.error("Error: Invalid/missing arguments!")
         sys.exit(0)
 
     server_port = int(sys.argv[1])
+    CREDS = json.loads(sys.argv[2])
+
+    util.logger.info("Starting REST server...")
     uvicorn.run(app, host="0.0.0.0", port=server_port)

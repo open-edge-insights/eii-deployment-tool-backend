@@ -55,5 +55,7 @@ ENV PYTHONPATH=$PYTHONPATH:/app/.local/lib/python3.8/site-packages:/app \
     PATH=$PATH:/app/.local/bin
 COPY --from=builder /root/.local/lib .local/lib
 COPY --from=builder /app .
+ARG CREDS
+ENV CREDS=${CREDS}
 HEALTHCHECK NONE
-ENTRYPOINT python3 eii_deployment_tool_backend.py $DEPLOYMENT_TOOL_BACKEND_PORT
+ENTRYPOINT python3 eii_deployment_tool_backend.py $DEPLOYMENT_TOOL_BACKEND_PORT ${CREDS}

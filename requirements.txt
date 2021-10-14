@@ -2,6 +2,7 @@ fastapi==0.68.1
 uvicorn==0.15.0
 ruamel.yaml==0.17.16
 pyyaml==5.4.1
+jsonmerge==1.8.0
 six==1.16.0
 opencv-contrib-python==4.5.3.56
 imutils==0.5.4
