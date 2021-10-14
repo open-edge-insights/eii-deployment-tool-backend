@@ -20,14 +20,18 @@
 
 import sys
 import os
+import time
 import json
 import subprocess as sp
 import logging
 from shlex import shlex
-from typing import List
+from threading import Thread, Lock
+from typing import List, Optional
+import cv2
 import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
+from starlette.responses import StreamingResponse
 
 DESCRIPTION = """
 EII Deployment Tool Backend provides REST APIs to Configure, build and deploy your
@@ -43,13 +47,18 @@ usecases
 
 * **Generate Config**
 
+## Camera
+
+* **Start Camera**
+* **Stop Camera**
+* **Stream Camera**
+
 """
 app = FastAPI(
     title = "Intel© Edge Insights for Industrial (EII) REST APIs",
     description = DESCRIPTION,
     version = "0.0.1"
 )
-
 
 class Util:
     """
@@ -352,6 +361,161 @@ class Project():
         return status, error_detail, projects
 
 
+class Camera:
+    """
+    Class for managing camera streaming
+
+    """
+
+    def __init__(self):
+        self.device_threads = {}
+        self.mutex = Lock()
+
+    def resize_image(self, image, width=None, height=None, method=cv2.INTER_AREA):
+        """Function to resize an image
+
+        :param image: imagedata
+        :type image: bytearray
+        :param width: new image width
+        :type width: int
+        :param height: new image height
+        :type height: int
+        :param method: resize method
+        :type resize: int
+        :return new_image: Resized image
+        :rtype new_image: bytearray
+        """
+        new_size = None
+        (h, w) = image.shape[:2]
+
+        if width is None and height is None:
+            return image
+        if width is None:
+            aspect = height / float(h)
+            new_size = (int(w * aspect), height)
+        else:
+            aspect = width / float(w)
+            new_size = (width, int(h * aspect))
+        new_image = cv2.resize(image, new_size, interpolation = method)
+        return new_image
+
+
+    def is_alive(self, device):
+        """Safely checks if the thread corresponding to the specified
+           camera device is alive/running or not
+
+        :param device: device identifier
+        :type device: string
+        :return is_alive: Whether thread is running or not
+        :rtype is_alive: boolean
+        """
+        self.mutex.acquire()
+        alive = self.device_threads[device]["alive"]
+        self.mutex.release()
+        return alive
+
+
+    def streamer_thread(self, device, image_width=None, image_height=None):
+        """ The thread that reads frames from the camera device
+
+        :param device: device identifier
+        :type device: string
+        :param image_width: frame width
+        :type image_width: int
+        :param image_height: frame height
+        :type image_height: int
+        """
+        cap = None
+        try:
+            dev = int(device) if device.isnumeric() else device
+            cap = cv2.VideoCapture(dev)
+            while self.is_alive(device) and cap and cap.isOpened():
+                _, frame = cap.read()
+                if frame is None:
+                    time.sleep(0.2)
+                    continue
+
+                frame = self.resize_image(frame, image_width, image_height)
+                # encode the frame in JPEG format
+                (_, encodedImage) = cv2.imencode(".jpg", frame)
+                if encodedImage is None:
+                    util.logger.info("Warning: encoding image -> " \
+                            "jpeg failed. Skipping frame")
+                    continue
+                # Convert to byte array along with headers for streaming
+                bframe = b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' +  \
+                            bytearray(encodedImage) + b'\r\n'
+                self.mutex.acquire()
+                self.device_threads[device]["frames"] = bframe
+                self.mutex.release()
+            # Close video capture
+            if cap and cap.isOpened():
+                cap.release()
+            # If thread was not signalled to terminate, then the camera capture
+            # must have closed due to an error. Remove the thread and device info
+            # from the list
+            if self.is_alive(device):
+                time.sleep(1)
+                self.mutex.acquire()
+                del self.device_threads[device]
+                self.mutex.release()
+                util.logger.error("Error while streaming camera {}".format(
+                    device))
+        except Exception as exception:
+            if cap and cap.isOpened():
+                cap.release()
+            if self.mutex.locked():
+                self.mutex.release()
+            util.logger.error("Error while streaming camera {}: {}".format(
+                device, exception))
+
+
+    # Called by thread function
+    def generate_frame(self, device):
+        """ Grabs frame from the queue and yields it for streaming
+
+        :param device: device identifier
+        :type device: string
+        :return frame: frame
+        :rtype frame: bytearray
+        """
+        # Exit if device is invalid/stopped
+        self.mutex.acquire()
+        alive = True if device in self.device_threads else False
+        self.mutex.release()
+        frame = None
+        while alive:
+            self.mutex.acquire()
+            # Check for parent (thread) termination signal
+            alive = self.device_threads[device]["alive"]
+            frame = self.device_threads[device]["frames"]
+            self.mutex.release()
+            yield frame
+
+
+    def get_camera_status(self, devices = None):
+        """ Gets the current status of all provided camera devices
+
+        :param devices: list of camera device ids
+        :type devices: list of strings
+        :return camera_status: camera status
+        :rtype camera_status: dict
+        """
+        camera_status = {}
+        self.mutex.acquire()
+        if devices is None or len(devices) == 0:
+            for device in self.device_threads:
+                camera_status[device] = "Running"
+        else:
+            for device in devices:
+                if device in self.device_threads:
+                    camera_status[device] = "Running"
+                else:
+                    camera_status[device] = "Not Running"
+        self.mutex.release()
+        return camera_status
+
+##############################################################################
 def do_generate_config(components, instances):
     """Generate the consolidated config file
 
@@ -442,6 +606,20 @@ def make_response_json(status, data, error_detail):
 class ProjectInfo(BaseModel):
     name: str = Field(..., title="Project name", max_length=128)
 
+class CameraInfo(BaseModel):
+    devices: List[str] = Field(..., title="Camera devices list",
+            min_items=0, max_items=32, max_length=64)
+    width: Optional[int] = Field(None, title="Frame width", gt=0, lt=9999)
+    height: Optional[int] = Field(None, title="Frame height", gt=0, lt=9999)
+    class Config:
+        schema_extra = {
+            "example": {
+                "devices": ["/dev/video0", "/dev/video1", "1", "2"],
+                "width": 320,
+                "height": 240
+                }
+            }
+
 class ComponentInfo(BaseModel):
     names: List[str] = Field(..., title="Component names", max_length=64, min_items=1, max_items=96)
     instance_count: int = Field(..., title="Number of instances", gt=0, lt=33)
@@ -454,6 +632,9 @@ class ResponseStatus(BaseModel):
 class Response(BaseModel):
     data: str = Field(..., title="Response Data")
     status_info: ResponseStatus = Field(..., title="Response Status")
+
+class Response204(BaseModel):
+    detail: str
 
 #
 # API defnitions
@@ -501,7 +682,96 @@ def generate_config(param: ComponentInfo):
     return make_response_json(status, json.dumps(config), error_detail)
 
 
+@app.post('/eii/ui/camera/{action}',
+    response_model=Response,
+    responses={200: {"model": Response}},
+    description="Starts and stops the specified camera devices"
+)
+def camera_operate(action: str, cameraInfo: CameraInfo):
+    supported_actions = ["start", "stop", "status"]
+
+    if action not in supported_actions:
+        return make_response_json(False, "", \
+                "Camera API FAILED. invalid arguments. expected any of {}" \
+		.format(supported_actions))
+
+    response = {}
+    if action == "start":
+        camera.mutex.acquire()
+        # Launch thread for each device
+        dts = camera.device_threads
+        for device in cameraInfo.devices:
+            if device not in dts:
+                dts[device] = {}
+                dts[device]["thread"] = Thread(
+                        target=camera.streamer_thread,
+                        args=(device, cameraInfo.width, cameraInfo.height))
+                dts[device]["alive"] = True
+                dts[device]["frames"] = []
+                dts[device]["thread"].start()
+            else:
+                util.logger.info("Warning: camera device {} already running" \
+                        .format(device))
+        num_devices = len(cameraInfo.devices)
+        camera.mutex.release()
+        if num_devices == 0:
+            response = make_response_json(False, "", "No camera devices specified")
+        else:
+            response = make_response_json(
+                    True, json.dumps(camera.get_camera_status()),"")
+    elif action == "stop":
+        camera.mutex.acquire()
+        devices = cameraInfo.devices
+        # When no devices are provided, assume all devices
+        if len(devices) == 0:
+            devices = list(camera.device_threads)
+        # Signal all the provided devices threads to exit
+        for device in devices:
+            if device in camera.device_threads:
+                camera.device_threads[device]["alive"] = False
+            else:
+                util.logger.info("Warning: camera device {} not running" \
+                        .format(device))
+        # Make a safe copy of the list
+        threads = camera.device_threads.copy()
+        camera.mutex.release()
+        # Wait for all the signalled theads to exit
+        for device in devices:
+            if device in threads:
+                threads[device]["thread"].join()
+                camera.mutex.acquire()
+                del camera.device_threads[device]
+                camera.mutex.release()
+        response = make_response_json(True, json.dumps(camera.get_camera_status()), "")
+    elif action == "status":
+        camera.mutex.acquire()
+        devices = cameraInfo.devices
+        camera.mutex.release()
+        response = make_response_json(True, json.dumps(camera.get_camera_status(devices)), "")
+    return response
+
+
+@app.get('/eii/ui/camera/stream/{device}',
+    response_class=StreamingResponse,
+    description="Stream from the specified camera device"
+)
+async def camera_stream(device: str):
+    # make a safe copy of the global dict
+    camera.mutex.acquire()
+    threads = camera.device_threads.copy()
+    camera.mutex.release()
+    if device in threads:
+        response = StreamingResponse(camera.generate_frame(device),
+            media_type="multipart/x-mixed-replace;boundary=frame")
+    else:
+        # return 204 for invalid devices
+        response = ('No data!', 204)
+    return response
+
+
+
 util = Util()
+camera = Camera()
 
 if __name__ == '__main__':
     if len(sys.argv) != 2 or int(sys.argv[1]) <= 0:

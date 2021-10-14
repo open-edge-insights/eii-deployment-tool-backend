@@ -39,7 +39,13 @@ USER root
 
 # Setting python env
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3-distutils python3-minimal
+    DEBIAN_FRONTEND=noninteractive \
+    apt-get install -y --no-install-recommends \
+    python3-distutils \
+    python3-minimal \
+    libopencv-dev \
+    python3-opencv && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -49,6 +55,5 @@ ENV PYTHONPATH=$PYTHONPATH:/app/.local/lib/python3.8/site-packages:/app \
     PATH=$PATH:/app/.local/bin
 COPY --from=builder /root/.local/lib .local/lib
 COPY --from=builder /app .
-
 HEALTHCHECK NONE
 ENTRYPOINT python3 eii_deployment_tool_backend.py $DEPLOYMENT_TOOL_BACKEND_PORT
