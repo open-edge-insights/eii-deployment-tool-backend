@@ -52,7 +52,7 @@ services:
     restart: unless-stopped
     ipc: "none"
     security_opt:
-    - no-new-privileges
+      - no-new-privileges
     healthcheck:
       test: ["CMD-SHELL", "exit", "0"]
       interval: 5m
@@ -67,6 +67,13 @@ services:
       # Available log levels: ERROR, INFO, DEBUG
       LOG_LEVEL: "INFO"
     ports:
-        - 5100:5100
+      - 5100:5100
     volumes:
+      # Selective mount can be done for deployment as 
+      # mounting whole /dev is not recommended
+      - "/dev:/dev"
       - $PWD/../:/app/IEdgeInsights:rw
+    devices:
+      # Selective mount can be done for deployment as 
+      # mounting whole /dev is not recommended
+      - "/dev:/dev"

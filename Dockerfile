@@ -31,7 +31,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip3 install --user -r requirements.txt
 
-COPY ./eii_deployment_tool_backend.py /app/
 
 FROM ubuntu:$UBUNTU_IMAGE_VERSION as runtime
 
@@ -44,7 +43,8 @@ RUN apt-get update && \
     python3-distutils \
     python3-minimal \
     libopencv-dev \
-    python3-opencv && \
+    python3-opencv \
+    v4l-utils && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -57,5 +57,7 @@ COPY --from=builder /root/.local/lib .local/lib
 COPY --from=builder /app .
 ARG CREDS
 ENV CREDS=${CREDS}
+COPY ./eii_deployment_tool_backend.py /app/
+COPY ./libs /app/libs
 HEALTHCHECK NONE
 ENTRYPOINT python3 eii_deployment_tool_backend.py $DEPLOYMENT_TOOL_BACKEND_PORT ${CREDS}
