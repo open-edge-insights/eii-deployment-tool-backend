@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-""" Main module of Deplyment tool backend """
+""" Main module of Deployment tool backend """
 
 import sys
 import json
@@ -64,6 +64,10 @@ usecases
 * **Stream Camera**
 * **Get Camera Config**
 * **Set Camera Config**
+
+## UDF
+
+* **List files, directories*
 
 """
 app = FastAPI(
@@ -209,6 +213,21 @@ class ComponentInfo(BaseModel): # pylint: disable=too-few-public-methods
             "example": {
                 "names": ["VideoIngestion", "VideoAnalytics"],
                 "instance_count": 2
+            }
+        }
+
+
+class ListFilesInfo(BaseModel): # pylint: disable=too-few-public-methods
+    """Class that defines param to use with */files/list/* API
+
+    """
+    path: str = Field(..., title="Directory path", max_length=128)
+    class Config: # pylint: disable=too-few-public-methods
+        """example data
+        """
+        schema_extra = {
+            "example": {
+                "path": "/common/video/udfs/"
             }
         }
 
@@ -569,6 +588,28 @@ async def camera_stream(device: str,
         raise HTTPException(status_code=HTTP_404_NOT_FOUND,
                 detail="Device not found!")
 
+    return response
+
+
+@app.post('/eii/ui/files/list',
+    response_model=Response200,
+    responses={200: {"model": Response200}},
+    description="Get list of files and directories at the specified path"
+)
+def list_files(listFilesInfo: ListFilesInfo,
+        token: str=Depends(Authentication.validate_session)):
+    """"Get list of files and directories at the specified path
+
+    :param listFilesInfo: param containing the directory path to search
+    :type listFilesInfo: ListFilesInfo
+    :param token: session token returned internally
+    :type token: str
+    :return response: API response
+    :rtype Response200
+    """
+    _ = token
+    status, error_detail,data = util.scan_dir(util.IE_DIR + listFilesInfo.path)
+    response = util.make_response_json(status, data, error_detail)
     return response
 
 
