@@ -25,6 +25,7 @@ import json
 import subprocess as sp
 import logging
 import shlex
+from threading import Lock
 
 class Util:
     """
@@ -32,18 +33,39 @@ class Util:
 
     """
 
-    IE_DIR = "/app/IEdgeInsights/"
-    EII_CONFIG_PATH = IE_DIR + "build/provision/config/eii_config.json"
-    EII_PROJECTS_PATH = IE_DIR + "build/projects/"
-    EII_BUILD_PATH = IE_DIR + "build"
-    TEMP_USECASE_FILE_PATH = EII_BUILD_PATH + "/.usecasex.yml"
-    LOGFILE = IE_DIR + "/build/console.log"
+    EII_DIR = "/app/IEdgeInsights/"
+    EII_CONFIG_PATH = EII_DIR + "build/provision/config/eii_config.json"
+    EII_PROJECTS_PATH = EII_DIR + "build/projects/"
+    EII_BUILD_PATH = EII_DIR + "build/"
+    TEMP_USECASE_FILE_NAME = ".usecasex.yml"
+    TEMP_USECASE_FILE_PATH = EII_BUILD_PATH + TEMP_USECASE_FILE_NAME
+    LOGFILE = EII_DIR + "/build/console.log"
     JSON_EXT = ".json"
+    HOST_IP = "172.17.0.1"
+    SSH_KEY_PATH = "/app/id_rsa"
+    state_mutex = Lock()
+
+    # generic keys
+    TASK="task"
+    PROGRESS="progress"
+    STATUS="status"
+    IN_PROGRESS="In Progress"
+    SUCCESS="Success"
+    FAILED="Failed"
+    PROVISION="provision"
+    BUILD="build"
+    ALIVE="alive"
+    THREAD="thread"
+    FRAMES="frames"
+
+    state_info = {TASK: "", PROGRESS: "", STATUS: ""}
 
     def __init__(self):
         error = None
         # Initilize logging
-        env_log_level=os.environ.get("LOG_LEVEL", "INFO")
+        env_log_level   = os.environ.get("LOG_LEVEL", "INFO")
+        self.host_user  = os.environ.get("HOST_USER", "")
+        self.host_eii_dir   = os.environ.get("HOST_EII_DIR", "")
 
         if env_log_level == "DEBUG":
             logging_format = "[%(funcName)(): %(lineno)s  ] %(message)s"
@@ -63,7 +85,7 @@ class Util:
         logging.basicConfig(level=logging_level, format=logging_format)
         self.logger = logging.getLogger("DeploymentToolBackend")
         if error:
-            self.logger.ERROR(error)
+            self.logger.error(error)
 
 
     def load_file(self, path):
@@ -188,8 +210,8 @@ class Util:
         return status, error_detail
 
 
-    def shell(self, cmd):
-        """Execute a shell command and return the output
+    def os_command(self, cmd):
+        """Execute an os command and return the output
         :param cmd: shell command
         "type cmd: str
         :return: status of operation
@@ -199,6 +221,7 @@ class Util:
         :return: command output
         :rtype: str
         """
+        self.logger.debug("CMD: %s", cmd)
         out = b''
         status = False
         error_detail = ""
@@ -211,6 +234,41 @@ class Util:
             error_detail = "error while executing {}: {}".format(cmd, exception)
             self.logger.error(error_detail)
         return status, error_detail, out.decode("utf-8")
+
+
+    def os_command_in_host(self, cmd, output=False):
+        """Execute a shell command in hist machine and return the output
+        :param cmd: shell command
+        :type cmd: str
+        :return: status of operation
+        :rtype: bool
+        :return: error description
+        :rtype: str
+        :return: command output
+        :rtype: str
+        """
+        out_str = ""
+        status = False
+        error_detail = ""
+        try:
+            remote_cmd = 'ssh -o "StrictHostKeyChecking=no" -i {} {}@{} "{}"'.format(
+                                Util.SSH_KEY_PATH, self.host_user, self.HOST_IP, cmd)
+            if output:
+                out = sp.check_output(
+                         remote_cmd,
+                         shell=True)
+                out_str = out.decode("utf-8")
+                status = True
+            else:
+                out = sp.call(
+                         remote_cmd,
+                         shell=True, stdin=sp.DEVNULL, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
+                out_str = str(out)
+                status = True if out == 0 else False
+        except Exception as exception:
+            error_detail = "error while executing {}: {}".format(cmd, exception)
+            self.logger.error(error_detail)
+        return status, error_detail, out_str
 
 
     def scan_dir(self, dir_path):
@@ -238,6 +296,41 @@ class Util:
             self.logger.error(error_detail)
             status = False
         return status, error_detail, file_list
+
+
+    @staticmethod
+    def get_state():
+        """Method to get the current state information
+
+        """
+        Util.state_mutex.acquire()
+        state_info = Util.state_info
+        Util.state_mutex.release()
+        return state_info
+
+    @staticmethod
+    def is_busy():
+        """Method to check if already a task in progress
+
+        """
+        return  Util.state_info[Util.STATUS] == Util.IN_PROGRESS
+
+
+    @staticmethod
+    def set_state(task, progress, status=IN_PROGRESS):
+        """Method to set the state information
+
+        """
+        Util.state_mutex.acquire()
+        if progress is None:
+            if task in Util.state_info:
+                del Util.state_info[task]
+        else:
+            Util.state_info[Util.TASK] = task
+            Util.state_info[Util.PROGRESS] = progress
+            Util.state_info[Util.STATUS] = status
+        Util.state_mutex.release()
+        return True
 
 
     def make_response_json(self,status, data, error_detail):

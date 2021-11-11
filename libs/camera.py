@@ -76,7 +76,7 @@ class Camera:
         :rtype is_alive: boolean
         """
         self.mutex.acquire()
-        alive = self.device_threads[device]["alive"]
+        alive = self.device_threads[device][Util.ALIVE]
         self.mutex.release()
         return alive
 
@@ -113,7 +113,7 @@ class Camera:
                 bframe = b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' +  \
                             bytearray(encoded_image) + b'\r\n'
                 self.mutex.acquire()
-                self.device_threads[device]["frames"] = bframe
+                self.device_threads[device][Util.FRAMES] = bframe
                 self.mutex.release()
             # Close video capture
             if cap and cap.isOpened():
@@ -152,8 +152,8 @@ class Camera:
         while alive:
             self.mutex.acquire()
             # Check for parent (thread) termination signal
-            alive = self.device_threads[device]["alive"]
-            frame = self.device_threads[device]["frames"]
+            alive = self.device_threads[device][Util.ALIVE]
+            frame = self.device_threads[device][Util.FRAMES]
             self.mutex.release()
             yield frame
 
@@ -173,12 +173,12 @@ class Camera:
         for device in devices:
             if device not in dts:
                 dts[device] = {}
-                dts[device]["thread"] = Thread(
+                dts[device][Util.THREAD] = Thread(
                         target=self.streamer_thread,
                         args=(device, width, height))
-                dts[device]["alive"] = True
-                dts[device]["frames"] = None
-                dts[device]["thread"].start()
+                dts[device][Util.ALIVE] = True
+                dts[device][Util.FRAMES] = None
+                dts[device][Util.THREAD].start()
             else:
                 self.util.logger.info("Warning: camera device %s already running", device)
         self.mutex.release()
@@ -197,7 +197,7 @@ class Camera:
         # Signal all the provided devices threads to exit
         for device in devices:
             if device in self.device_threads:
-                self.device_threads[device]["alive"] = False
+                self.device_threads[device][Util.ALIVE] = False
             else:
                 self.util.logger.info("Warning: camera device %s not running",
                         device)
@@ -207,7 +207,7 @@ class Camera:
         # Wait for all the signalled theads to exit
         for device in devices:
             if device in threads:
-                threads[device]["thread"].join()
+                threads[device][Util.THREAD].join()
                 self.mutex.acquire()
                 if device in self.device_threads:
                     del self.device_threads[device]
@@ -281,7 +281,7 @@ class Camera:
         for device in configs:
             params = configs[device]
             for param in params:
-                status, error_detail, result = self.util.shell(
+                status, error_detail, result = self.util.os_command(
                         "v4l2-ctl -d {} -c {}={}".format(
                             device, param, params[param]))
                 self.util.logger.debug("v4l2-ctl output: %s", result)
@@ -304,7 +304,7 @@ class Camera:
         error_detail = ""
         failed_devices = []
         for device in configs:
-            status, error_detail, result = self.util.shell("v4l2-ctl -d {} -l".format(device))
+            status, error_detail, result = self.util.os_command("v4l2-ctl -d {} -l".format(device))
             self.util.logger.info("v4l2-ctl result: %s", result)
             if status is False:
                 data[device] = {}

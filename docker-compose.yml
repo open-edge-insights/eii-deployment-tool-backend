@@ -32,10 +32,8 @@ services:
         GO_VERSION: ${GO_VERSION}
         PYTHON_VERSION: ${PYTHON_VERSION}
     image: ia_eiibase:${EII_VERSION}
-  ## Define deployment-tool-backend service
-  ia_deployment_tool_backend:
-    depends_on:
-      - ia_eiibase
+  ## Define DeploymentToolBackend service
+  deployment_tool_backend:
     build:
       context: $PWD
       dockerfile: $PWD/Dockerfile
@@ -46,9 +44,9 @@ services:
         # Specify users credentials
         CREDS: '[["admin","admin@123"]]'    
     read_only: true
-    image: ia_deployment_tool_backend:${EII_VERSION}
-    container_name: ia_deployment_tool_backend
-    hostname: ia_deployment_tool_backend
+    image: deployment_tool_backend:${EII_VERSION}
+    container_name: deployment_tool_backend
+    hostname: deployment_tool_backend
     restart: unless-stopped
     ipc: "none"
     security_opt:
@@ -57,8 +55,8 @@ services:
       test: ["CMD-SHELL", "exit", "0"]
       interval: 5m
     environment:
-      AppName: "deployment-tool-backend"
-      DEV_MODE: ${DEV_MODE}
+      AppName: "DeploymentToolBackend"
+      DEV_MODE: "true"
       PROFILING_MODE: ${PROFILING_MODE}
       no_proxy: ${eii_no_proxy}
       NO_PROXY: ${eii_no_proxy}
@@ -66,6 +64,8 @@ services:
       DEPLOYMENT_TOOL_BACKEND_PORT: 5100
       # Available log levels: ERROR, INFO, DEBUG
       LOG_LEVEL: "INFO"
+      HOST_USER: ${USER}
+      HOST_EII_DIR: ${PWD}/../
     ports:
       - 5100:5100
     volumes:
@@ -73,7 +73,16 @@ services:
       # mounting whole /dev is not recommended
       - "/dev:/dev"
       - $PWD/../:/app/IEdgeInsights:rw
+    tmpfs:
+      - /root/.ssh
     devices:
       # Selective mount can be done for deployment as 
       # mounting whole /dev is not recommended
       - "/dev:/dev"
+    networks:
+      - eii
+networks:
+  eii:
+    external:
+      name: eii
+

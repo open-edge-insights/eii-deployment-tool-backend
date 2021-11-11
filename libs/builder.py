@@ -22,6 +22,8 @@
 
 import os
 import json
+from threading import Thread
+import yaml
 from .util import Util
 
 class Builder:
@@ -30,6 +32,9 @@ class Builder:
     """
     def __init__(self):
         self.util = Util()
+        self.threads = {Util.BUILD: {}, Util.PROVISION: {}}
+        for key in self.threads:
+            self.threads[key][Util.ALIVE] = False
 
 
     def create_usecase_yml_file(self, components, path):
@@ -71,6 +76,9 @@ class Builder:
         :return: error description
         :rtype: str
         """
+        if Util.is_busy():
+            return False, "busy", ""
+
         status, error_detail = self.create_usecase_yml_file(
                 components, self.util.TEMP_USECASE_FILE_PATH)
         if not status:
@@ -88,16 +96,18 @@ class Builder:
         os.chdir(self.util.EII_BUILD_PATH)
         # Save old config
         status, error_detail, old_config = self.util.get_consolidated_config()
-        if instances > 1:
-            status, error_detail, out = self.util.shell('python3 builder.py -f {} -v{}' \
-                    .format(self.util.TEMP_USECASE_FILE_PATH, instances))
-        else:
-            status, error_detail, out = self.util.shell('python3 builder.py -f {}' \
-                    .format(self.util.TEMP_USECASE_FILE_PATH))
-        self.util.store_file(self.util.LOGFILE, out, True)
-        status, error_detail, new_config = self.util.get_consolidated_config()
+        v_str = "-v{}".format(instances) if instances > 1 else ""
+        status, error_detail, _ = self.util.os_command_in_host(
+                'cd {}/build && sudo -E python3 builder.py -f {} {}' \
+                .format(self.util.host_eii_dir,
+                    self.util.TEMP_USECASE_FILE_NAME, v_str))
         if not status:
             error_detail = "error: failed to generate eii_config"
+            self.util.logger.error(error_detail)
+            return False, error_detail, None
+        status, error_detail, new_config = self.util.get_consolidated_config()
+        if not status:
+            error_detail = "error: failed to retrieve eii_config"
             self.util.logger.error(error_detail)
             return False, error_detail, None
 
@@ -159,6 +169,9 @@ class Builder:
         :return: error description
         :rtype: str
         """
+        if Util.is_busy():
+            return False, "busy"
+
         status = True
         error_detail = ""
         print(config)
@@ -178,3 +191,184 @@ class Builder:
             status = False
 
         return status, error_detail
+
+    def update_env_file(self, path, key, value):
+        """Updates an env file with 'key=value' pairs
+
+        :param path: path to the env file
+        :type path: str
+        :param key: key to look for
+        :type key: str
+        :param value: value to set
+        :typevaluey: str
+        :return: status of operation
+        :rtype: bool
+        :return: error description
+        :rtype: str
+        """
+        out = ""
+        status = False
+        error_detail = ""
+        try:
+            with open(path, "r", encoding="utf-8") as reader:
+                for line in reader.readlines():
+                    key_value = line.strip().split("=")
+                    if status or key_value is None or key_value[0] != key:
+                        out = out + line
+                        continue
+                    out = out + "{}={}\n".format(key, value)
+                    status = True
+            with open(path, "w", encoding="utf-8") as writer:
+                writer.writelines(out)
+        except Exception as exception:
+            status = False
+            error_detail = "error: FAILED to update env file: {}".format(
+                    exception)
+        return status, error_detail
+
+
+    def provision_thread(self):
+        """Thread for Provisioning
+
+        """
+        self.util.logger.info("Provisioning...")
+        status, error_out, _ = self.util.os_command_in_host(
+                'cd {}/build/provision && sudo ./provision.sh ' \
+                '../docker-compose.yml'.format(self.util.host_eii_dir))
+        if not status:
+            Util.set_state(Util.PROVISION, 0, "Failed")
+            error_detail = "error: provisioning FAILED!: {}".format(error_out)
+            self.util.logger.error(error_detail)
+        else:
+            Util.set_state(Util.PROVISION, 100, "Success")
+        self.threads[Util.PROVISION][Util.ALIVE] = False
+
+
+    def do_provision(self, dev_mode):
+        """Do provision
+
+        :param dev_mode: Whether DEV_MODE need to be set to "true" or "false"
+        :type dev_mode: bool
+        :return: status of operation
+        :rtype: bool
+        :return: error description
+        :rtype: str
+        """
+        if Util.is_busy():
+            return False, "busy", ""
+
+        Util.set_state(Util.PROVISION, 0)
+        status = False
+        error_detail = ""
+        self.util.logger.info("Setting provisioning mode...")
+        # Set DEV_MODE
+        key = "DEV_MODE"
+        value = "true" if dev_mode else "false"
+        env_path = self.util.EII_BUILD_PATH + '/.env'
+        status, error_out = self.update_env_file(env_path, key, value)
+        if status is False:
+            error_detail = "error: FAILE to set DEV_MODE in .env!: {}".format(
+                    error_out)
+            self.util.logger.error(error_detail)
+            Util.set_state(Util.PROVISION, 0, "Failed")
+            return status, error_detail, ""
+
+        Util.set_state(Util.PROVISION, 10)
+        self.threads[Util.PROVISION][Util.THREAD] = Thread(target=self.provision_thread)
+        self.threads[Util.PROVISION][Util.ALIVE] = True
+        self.threads[Util.PROVISION][Util.THREAD].start()
+        status = True
+        return status, error_detail, ""
+
+
+    def get_services_from_docker_compose_yml(self, yml):
+        """Get list of services from specified docker-compose.yml file
+
+        :param yml: path to docker-compose.yml
+        :return: status of operation
+        :rtype: bool
+        :return: error description
+        :rtype: str
+        :type yml: str
+        """
+        status = False
+        services = []
+        error_detail = ""
+        try:
+            with open(yml, 'r', encoding='utf-8') as reader:
+                data = yaml.safe_load(reader)
+                if "services" not in data:
+                    self.util.logger.error('Invalid yaml file: No services defined')
+                    return None
+                for name in data["services"]:
+                    services.append(name)
+            status = True
+        except Exception as exception:
+            error_detail = "failed to get services from {}: {}".format(yml, exception)
+            self.util.logger.error(error_detail)
+        return status, error_detail, services
+
+
+    def builder_thread(self, services, no_cache):
+        """Thread for building
+
+        :param services: List of services to be built or "*" for all services
+        :type services: [str]
+        :param no_cache: whether to use --no-cache option with build
+        :type no_cache: bool
+        """
+        no_cache_str = "--no-cache" if no_cache else ""
+        if services[0] == "*":
+            status, error_out, services_list = \
+                self.get_services_from_docker_compose_yml(self.util.EII_BUILD_PATH + \
+                        '/docker-compose-build.yml')
+            if status is False:
+                self.util.logger.error("Build FAILED: failed to parse yml file: %s",
+                            error_out)
+                Util.set_state(Util.BUILD, 0, "Failed")
+                self.threads[Util.BUILD][Util.ALIVE] = False
+                return
+        else:
+            services_list = services
+
+        num_services = len(services_list)
+        i = 0
+        self.util.store_file(self.util.LOGFILE, "", True)
+        for service in services_list:
+            if not self.threads[Util.BUILD][Util.ALIVE]:
+                break
+            status, error_out, _ = self.util.os_command_in_host(
+                'cd {}/build && docker-compose -f docker-compose-build.yml ' \
+                'build {} {}'.format(self.util.host_eii_dir, no_cache_str, service))
+            if status is False:
+                Util.set_state(Util.BUILD, 0, "Failed")
+                self.util.logger.error("Build FAILED: %s", error_out)
+                self.threads[Util.BUILD][Util.ALIVE] = False
+                return
+            i = i + 1
+            Util.set_state(Util.BUILD, int((i*100)/num_services))
+        Util.set_state(Util.BUILD, 100, "Success")
+        self.threads[Util.BUILD][Util.ALIVE] = False
+
+
+    def do_build(self, services, no_cache):
+        """Do build
+
+        :param services: List of services to be built or "*" for all services
+        :type services: [str]
+        :param no_cache: whether to use --no-cache option with build
+        :type no_cache: bool
+        :return: status of operation
+        :rtype: bool
+        :return: error description
+        :rtype: str
+        """
+        if Util.is_busy():
+            return False, "busy", ""
+
+        self.util.logger.info("Building...")
+        self.threads[Util.BUILD][Util.THREAD] = Thread(target=self.builder_thread,
+                args=(services, no_cache))
+        self.threads[Util.BUILD][Util.ALIVE] = True
+        self.threads[Util.BUILD][Util.THREAD].start()
+        return True, "", ""

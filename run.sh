@@ -20,12 +20,53 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-set -a
-source ../build/.env
-set +a
-mkdir -p ../build/projects
+function setupHost() {
+    mkdir -p ../build/projects 
+    # setup secure ssh
+    if ! [ -f ./id_rsa.pub ];then
+        echo "Generating ssh key..."
+        ssh-keygen -f id_rsa
+    fi
+    ssh-copy-id -i id_rsa.pub $USER@localhost
+    # add user to sudoers
+    sudo grep 'NOPASSWD' /etc/sudoers.d/$USER > /dev/null 2>&1
+    if [ "$?" -ne 0 ];then
+        echo "Adding user $USER to sudoers..." 
+        echo "$USER ALL=(ALL:ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/$USER
+    fi
+}
+
+
+function sourceEnv() {
+    set -a
+    source ../build/.env
+    set +a
+}
+
+function create_docker_network() {
+    echo "Checking eii docker network.."
+    docker_networks=$(docker network ls --filter name=eii| awk '{print $2}')
+    docker_net_list=(`echo ${docker_networks}`);
+    network_present=false
+    for dn in "${docker_net_list[@]}"
+    do
+        if [[ "$dn" = "eii" ]];then
+            network_present=true
+            break
+        fi
+    done
+    if [[ "$network_present" = false ]]; then
+        echo "Creating eii docker bridge network as it is not present.."
+        docker network create eii
+    fi
+}
+
+sourceEnv
 
 if [ "$1" ==  "--build" -o "$1" == "-b" ]; then
+    create_docker_network
+    docker-compose down
+    setupHost
     docker-compose build $2
     docker-compose up -d
 elif [ "$1" ==  "--restart" -o "$1" == "-r" ]; then
@@ -33,6 +74,8 @@ elif [ "$1" ==  "--restart" -o "$1" == "-r" ]; then
     docker-compose up -d
 elif [ "$1" ==  "--down" -o "$1" == "-d" ]; then
     docker-compose down
+elif [ "$1" ==  "--up" -o "$1" == "-u" ]; then
+    docker-compose up -d
 elif [ "$1" != "" ]; then
     echo "Error: unexpected param: $1"
     exit 

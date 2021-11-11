@@ -69,6 +69,13 @@ usecases
 
 * **List files, directories*
 
+## Provision & Build
+
+* **Provision**
+* **Build**
+* **Get status**
+
+
 """
 app = FastAPI(
     title = "Intel© Edge Insights for Industrial (EII) REST APIs",
@@ -93,7 +100,7 @@ class ProjectInfo(BaseModel): # pylint: disable=too-few-public-methods
     """Class that defines Project information param
 
     """
-    name: str = Field(..., title="Project name", max_length=128)
+    name: str = Field(..., title="Project name", min_length=1,max_length=128)
     class Config: # pylint: disable=too-few-public-methods
         """example data
         """
@@ -108,8 +115,8 @@ class Credentials(BaseModel): # pylint: disable=too-few-public-methods
     """Class that defines credential param for authentication/login
 
     """
-    username: str = Field(..., title="User name", max_length=32)
-    password: str = Field(..., title="Password", max_length=32)
+    username: str = Field(..., title="User name", min_length=1, max_length=32)
+    password: str = Field(..., title="Password", min_length=1, max_length=32)
     class Config: # pylint: disable=too-few-public-methods
         """example data
         """
@@ -189,7 +196,7 @@ class ComponentList(BaseModel): # pylint: disable=too-few-public-methods
     """ Class that defines component list param to use with */config/* APIs
 
     """
-    names: List[str] = Field(..., title="Component names", max_length=64,
+    names: List[str] = Field(..., title="Component names", min_length=1, max_length=64,
                             min_items=1, max_items=96)
     class Config: # pylint: disable=too-few-public-methods
         """ example data """
@@ -204,7 +211,7 @@ class ComponentInfo(BaseModel): # pylint: disable=too-few-public-methods
     """ Class that defines component info param to use with */config/* APIs
 
     """
-    names: List[str] = Field(..., title="Component names", max_length=64,
+    names: List[str] = Field(..., title="Component names", min_length=1, max_length=64,
             min_items=1, max_items=96)
     instance_count: int = Field(..., title="Number of instances", gt=0, lt=33)
     class Config: # pylint: disable=too-few-public-methods
@@ -221,13 +228,47 @@ class ListFilesInfo(BaseModel): # pylint: disable=too-few-public-methods
     """Class that defines param to use with */files/list/* API
 
     """
-    path: str = Field(..., title="Directory path", max_length=128)
+    path: str = Field(..., title="Directory path", min_length=1, max_length=512)
     class Config: # pylint: disable=too-few-public-methods
         """example data
         """
         schema_extra = {
             "example": {
                 "path": "/common/video/udfs/"
+            }
+        }
+
+
+class ProvisionInfo(BaseModel): # pylint: disable=too-few-public-methods
+    """Class that defines param to use with */provision/ API
+
+    """
+    dev_mode: bool = Field(..., title="Is DEV_MODE enabled")
+    class Config: # pylint: disable=too-few-public-methods
+        """example data
+        """
+        schema_extra = {
+            "example": {
+                "dev_mode": True
+            }
+        }
+
+
+class BuildInfo(BaseModel): # pylint: disable=too-few-public-methods
+    """Class that defines param to use with */build/ API
+       Services param contains the list of services to be built or "*"
+       if all services in the usecase needs to be built
+
+    """
+    services: List[str] = Field(..., title="Services to build")
+    no_cache: Optional[bool] = Field(False, title="enable --no-cache")
+    class Config: # pylint: disable=too-few-public-methods
+        """example data
+        """
+        schema_extra = {
+            "example": {
+                "services": ["*"],
+                "no_cache": False
             }
         }
 
@@ -332,11 +373,8 @@ def logout(token: str = Depends(Authentication.validate_session)):
     responses={200: {"model": Response200}},
     description="Returns specified project config data"
 )
-# TODO:Disable authorization check for this API, as login is not yet 
-# implemented in frontend
-def project_load(proj: ProjectInfo):
-#def project_load(proj: ProjectInfo, token: str=Depends(
-#        Authentication.validate_session)):
+def project_load(proj: ProjectInfo, token: str=Depends(
+        Authentication.validate_session)):
     """Returns specified project config data
 
     :param proj: project info
@@ -346,7 +384,7 @@ def project_load(proj: ProjectInfo):
     :return response: API response
     :rtype Response200
     """
-    #_ = token
+    _ = token
     status, error_detail, config = project.do_load_project(proj.name)
     return util.make_response_json(status, config, error_detail)
 
@@ -356,11 +394,8 @@ def project_load(proj: ProjectInfo):
     responses={200: {"model": Response200}},
     description="Saves current project config data to specified file"
 )
-# TODO:Disable authorization check for this API, as login is not yet 
-# implemented in frontend
-def project_store(proj: ProjectInfo):
-#def project_store(proj: ProjectInfo, token: str=Depends(
-#        Authentication.validate_session)):
+def project_store(proj: ProjectInfo, token: str=Depends(
+        Authentication.validate_session)):
     """Stores the specified project config data
 
     :param proj: project info
@@ -370,7 +405,7 @@ def project_store(proj: ProjectInfo):
     :return response: API response
     :rtype Response200
     """
-    #_ = token
+    _ = token
     status, error_detail = project.do_store_project(proj.name)
     return util.make_response_json(status, " ", error_detail)
 
@@ -380,10 +415,8 @@ def project_store(proj: ProjectInfo):
     responses={200: {"model": Response200}},
     description="Returns list of all the saved project config data"
 )
-# TODO:Disable authorization check for this API, as login is not yet 
-# implemented in frontend
 def project_list(
-        #token: str=Depends(Authentication.validate_session)
+        token: str=Depends(Authentication.validate_session)
         ):
     """"Returns list of all the saved project config data"
 
@@ -392,6 +425,7 @@ def project_list(
     :return response: API response
     :rtype Response200
     """
+    _ = token
     status, error_detail, projects = project.do_list_projects()
     return util.make_response_json(status, projects, error_detail)
 
@@ -402,11 +436,8 @@ def project_list(
     description="Generates default config for the specified components"
             " and returns the same"
 )
-# TODO:Disable authorization check for this API, as login is not yet 
-# implemented in frontend
-def generate_config(comp_info: ComponentInfo):
-#def generate_config(comp_info: ComponentInfo,
-#        token: str=Depends(Authentication.validate_session)):
+def generate_config(comp_info: ComponentInfo,
+        token: str=Depends(Authentication.validate_session)):
     """Generates default config for the specified components
        and returns the same
 
@@ -417,7 +448,7 @@ def generate_config(comp_info: ComponentInfo):
     :return response: API response
     :rtype Response200
     """
-    #_ = token
+    _ = token
     status, error_detail, config = builder.do_generate_config(
                                         comp_info.names,
                                         comp_info.instance_count)
@@ -429,11 +460,8 @@ def generate_config(comp_info: ComponentInfo):
     responses={200: {"model": Response200}},
     description="Get current config for the specified components"
 )
-# TODO:Disable authorization check for this API, as login is not yet 
-# implemented in frontend
-def get_config(comp_list: ComponentList):
-#def get_config(comp_list: ComponentList,
-#        token: str=Depends(Authentication.validate_session)):
+def get_config(comp_list: ComponentList,
+        token: str=Depends(Authentication.validate_session)):
     """Get current config for the specified components"
 
     :param comp_list: component list
@@ -443,7 +471,7 @@ def get_config(comp_list: ComponentList):
     :return response: API response
     :rtype Response200
     """
-    #_ = token
+    _ = token
     status, error_detail, config = builder.do_get_config(comp_list.names)
     return util.make_response_json(status, config, error_detail)
 
@@ -453,11 +481,8 @@ def get_config(comp_list: ComponentList):
     responses={200: {"model": Response200}},
     description="Get current config for the specified components"
 )
-# TODO:Disable authorization check for this API, as login is not yet 
-# implemented in frontend
-def set_config(config: Dict):
-#def set_config(config: Dict,
-#        token: str=Depends(Authentication.validate_session)):
+def set_config(config: Dict,
+        token: str=Depends(Authentication.validate_session)):
     """Get current config for the specified components"
 
     :param config:
@@ -467,7 +492,7 @@ def set_config(config: Dict):
     :return response: API response
     :rtype Response200
     """
-    #_ = token
+    _ = token
     status, error_detail = builder.do_set_config(config)
     return util.make_response_json(status, "", error_detail)
 
@@ -596,20 +621,84 @@ async def camera_stream(device: str,
     responses={200: {"model": Response200}},
     description="Get list of files and directories at the specified path"
 )
-def list_files(listFilesInfo: ListFilesInfo,
+def list_files(list_files_info: ListFilesInfo,
         token: str=Depends(Authentication.validate_session)):
     """"Get list of files and directories at the specified path
 
-    :param listFilesInfo: param containing the directory path to search
-    :type listFilesInfo: ListFilesInfo
+    :param list_files_info: param containing the directory path to search
+    :type list_files_info: ListFilesInfo
     :param token: session token returned internally
     :type token: str
     :return response: API response
     :rtype Response200
     """
     _ = token
-    status, error_detail,data = util.scan_dir(util.IE_DIR + listFilesInfo.path)
+    status, error_detail,data = util.scan_dir(util.EII_DIR + list_files_info.path)
     response = util.make_response_json(status, data, error_detail)
+    return response
+
+
+@app.post('/eii/ui/provision',
+    response_model=Response200,
+    responses={200: {"model": Response200}},
+    description="Do Provisioning"
+)
+def provision(provision_info: ProvisionInfo,
+        token: str=Depends(Authentication.validate_session)):
+    """"Do provisioning
+
+    :param dev_mode: Provision in dev mode ot prod mode
+    :type dev_mode: bool
+    :param token: session token returned internally
+    :type token: str
+    :return response: API response
+    :rtype Response200
+    """
+    _ = token
+    status, error_detail, data = builder.do_provision(provision_info.dev_mode)
+    response = util.make_response_json(status, data, error_detail)
+    return response
+
+
+@app.post('/eii/ui/build',
+    response_model=Response200,
+    responses={200: {"model": Response200}},
+    description="Do Provisioning"
+)
+def build(build_info: BuildInfo,
+        token: str=Depends(Authentication.validate_session)):
+    """"Do build
+
+    :param build_info: services to build
+    :type build_info: BuildInfo
+    :param token: session token returned internally
+    :type token: str
+    :return response: API response
+    :rtype Response200
+    """
+    _ = token
+    status, error_detail, data = builder.do_build(
+            build_info.services, build_info.no_cache)
+    response = util.make_response_json(status, data, error_detail)
+    return response
+
+
+@app.get('/eii/ui/status',
+    response_model=Response200,
+    responses={200: {"model": Response200}},
+    description="Do Provisioning"
+)
+def getstatus(token: str=Depends(Authentication.validate_session)):
+    """"Get status
+
+    :param token: session token returned internally
+    :type token: str
+    :return response: API response
+    :rtype Response200
+    """
+    _ = token
+    data = Util.get_state()
+    response = util.make_response_json(True, data, "")
     return response
 
 

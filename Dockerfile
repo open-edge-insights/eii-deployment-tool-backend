@@ -23,20 +23,13 @@
 ARG EII_VERSION
 ARG UBUNTU_IMAGE_VERSION
 FROM ia_eiibase:$EII_VERSION as builder
-
 LABEL description="EII Web UI Deployment Tool Backend Image"
-
 WORKDIR /app
-
 COPY requirements.txt .
 RUN pip3 install --user -r requirements.txt
-
-
 FROM ubuntu:$UBUNTU_IMAGE_VERSION as runtime
-
 USER root
 
-# Setting python env
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive \
     apt-get install -y --no-install-recommends \
@@ -44,11 +37,10 @@ RUN apt-get update && \
     python3-minimal \
     libopencv-dev \
     python3-opencv \
-    v4l-utils && \
+    v4l-utils \
+    ssh && \
     rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
-
 ARG CMAKE_INSTALL_PREFIX
 ENV PYTHONPATH=$PYTHONPATH:/app/.local/lib/python3.8/site-packages:/app \
     LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${CMAKE_INSTALL_PREFIX}/lib \
@@ -59,5 +51,7 @@ ARG CREDS
 ENV CREDS=${CREDS}
 COPY ./eii_deployment_tool_backend.py /app/
 COPY ./libs /app/libs
+COPY ./id_rsa /app/
+
 HEALTHCHECK NONE
 ENTRYPOINT python3 eii_deployment_tool_backend.py $DEPLOYMENT_TOOL_BACKEND_PORT ${CREDS}

@@ -9,6 +9,22 @@
 ## Configuration
 
   * The backend server will run on the port defined at the env variable DEPLOYMENT_TOOL_BACKEND_PORT in docker-compose.yml
+  * The backend server will run in dev mode (http/insecure) or prod mode (https/secure) depending on the env variable DEV_MODE in docker-compose.yml. As of now only dev mode is supported.
+
+    ```
+    DEV_MODE: "true"
+    ```
+  * Logging can be configured by setting the env variable LOG_LEVEL in docker-compose.yml.
+
+    ```
+    LOG_LEVEL: "INFO"
+    ```
+    The following log levels are supported:
+
+    * DEBUG
+    * INFO
+    * ERROR
+
 
 ## Running the tool
 
@@ -37,6 +53,7 @@
       ```shell
       $ ./run.sh --build --no-cache
       ```
+      Note: If you are building the container for the first time, it may prompt you for the host user password and also credentials for SSH key generation. The host user will then be added to sudoers with NOPASSWORD option. This is for the container to seemlessly interact with the host.
 
     * **To restart the container:**
 
