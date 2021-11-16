@@ -9,10 +9,11 @@
 ## Configuration
 
   * The backend server will run on the port defined at the env variable DEPLOYMENT_TOOL_BACKEND_PORT in docker-compose.yml
-  * The backend server will run in dev mode (http/insecure) or prod mode (https/secure) depending on the env variable DEV_MODE in docker-compose.yml. As of now only dev mode is supported.
+  * The backend server will run in dev mode (http/insecure) or prod mode (https/secure) depending on the env variable 'dev_mode' in docker-compose.yml.
+    By default prod mode is enabled.
 
     ```
-    DEV_MODE: "true"
+    dev_mode: "false"
     ```
   * Logging can be configured by setting the env variable LOG_LEVEL in docker-compose.yml.
 
@@ -80,7 +81,7 @@
   The tool auto-generates OpenAPI documentation for all the REST APIs it exposes.
   This documentation can be accessed at its **/docs** endpoint.
 
-  for e.g. 
+  for e.g.
     ```
-    http://127.0.0.1:5100/docs
+    https://127.0.0.1:5100/docs
     ```

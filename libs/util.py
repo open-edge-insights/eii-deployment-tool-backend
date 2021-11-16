@@ -34,15 +34,18 @@ class Util:
     """
 
     EII_DIR = "/app/IEdgeInsights/"
-    EII_CONFIG_PATH = EII_DIR + "build/provision/config/eii_config.json"
-    EII_PROJECTS_PATH = EII_DIR + "build/projects/"
     EII_BUILD_PATH = EII_DIR + "build/"
+    EII_PROVISION_PATH = EII_BUILD_PATH + "provision/"
+    EII_CONFIG_PATH = EII_PROVISION_PATH + "config/eii_config.json"
+    EII_PROJECTS_PATH = EII_BUILD_PATH + "projects/"
     TEMP_USECASE_FILE_NAME = ".usecasex.yml"
     TEMP_USECASE_FILE_PATH = EII_BUILD_PATH + TEMP_USECASE_FILE_NAME
-    LOGFILE = EII_DIR + "/build/console.log"
+    LOGFILE_PROVISION = ".provision.log"
+    LOGFILE_BUILD = ".build.log"
     JSON_EXT = ".json"
     HOST_IP = "172.17.0.1"
     SSH_KEY_PATH = "/app/id_rsa"
+    ENCODING = "utf-8"
     state_mutex = Lock()
 
     # generic keys
@@ -57,6 +60,10 @@ class Util:
     ALIVE="alive"
     THREAD="thread"
     FRAMES="frames"
+    START="start"
+    STOP="stop"
+    RESTART="restart"
+    BUSY="busy"
 
     state_info = {TASK: "", PROGRESS: "", STATUS: ""}
 
@@ -67,17 +74,14 @@ class Util:
         self.host_user  = os.environ.get("HOST_USER", "")
         self.host_eii_dir   = os.environ.get("HOST_EII_DIR", "")
 
+        logging_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         if env_log_level == "DEBUG":
-            logging_format = "[%(funcName)(): %(lineno)s  ] %(message)s"
             logging_level = logging.DEBUG
         elif env_log_level == "INFO":
-            logging_format = "%(message)s"
             logging_level = logging.INFO
         elif env_log_level == "ERROR":
-            logging_format = "%(message)s"
             logging_level = logging.ERROR
         else:
-            logging_format = "%(message)s"
             logging_level = logging.INFO
             error = "Invalid log level {}. Resetting log level to INFO".format(
                     env_log_level)
@@ -105,10 +109,10 @@ class Util:
             data = None
             status = True
             error_detail = ""
-            with open(path, "r", encoding='utf8') as filehandle:
+            with open(path, "r", encoding=Util.ENCODING) as filehandle:
                 data = filehandle.read()
             if isinstance(data, (bytearray, bytes)):
-                data = data.decode('utf-8')
+                data = data.decode(Util.ENCODING)
         except Exception as exception:
             status = False
             error_detail = "failed to read file: [{}]: {}".format(path, exception)
@@ -138,11 +142,11 @@ class Util:
             else:
                 mode = "a"
 
-            with open(path, mode, encoding="utf8") as filehandle:
+            with open(path, mode, encoding=Util.ENCODING) as filehandle:
                 if isinstance(data, str):
                     filehandle.write(data)
                 elif isinstance(data, (bytearray, bytes)):
-                    filehandle.write(data.decode('utf-8'))
+                    filehandle.write(data.decode(Util.ENCODING))
                 else:
                     status = False
                     error_detail = "Internal error: Unhandled type: {}".format(type(data))
@@ -233,7 +237,7 @@ class Util:
         except Exception as exception:
             error_detail = "error while executing {}: {}".format(cmd, exception)
             self.logger.error(error_detail)
-        return status, error_detail, out.decode("utf-8")
+        return status, error_detail, out.decode(Util.ENCODING)
 
 
     def os_command_in_host(self, cmd, output=False):
@@ -250,6 +254,7 @@ class Util:
         out_str = ""
         status = False
         error_detail = ""
+        self.logger.debug(cmd)
         try:
             remote_cmd = 'ssh -o "StrictHostKeyChecking=no" -i {} {}@{} "{}"'.format(
                                 Util.SSH_KEY_PATH, self.host_user, self.HOST_IP, cmd)
@@ -257,7 +262,7 @@ class Util:
                 out = sp.check_output(
                          remote_cmd,
                          shell=True)
-                out_str = out.decode("utf-8")
+                out_str = out.decode(Util.ENCODING)
                 status = True
             else:
                 out = sp.call(
@@ -353,14 +358,11 @@ class Util:
             if not isinstance(data, str):
                 data = json.dumps(data)
 
-        #TBD
-        console_log = ""
         response_json = {
                             "data": data,
                             "status_info": {
                                 "status": status,
-                                "error_detail": error_detail,
-                                "console": console_log
+                                "error_detail": error_detail
                             }
                         }
 

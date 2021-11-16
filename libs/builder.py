@@ -22,6 +22,7 @@
 
 import os
 import json
+import base64
 from threading import Thread
 import yaml
 from .util import Util
@@ -64,7 +65,26 @@ class Builder:
         return status, error_detail
 
 
-    def do_generate_config(self, components, instances):
+    def merge_interfaces(self, target, source):
+        """merge interfaces definitions
+
+        :param target: target interface list
+        :type target: [dict]
+        :param source: source interface list
+        :type source: [dict]
+        """
+        intf_types = ["Publishers", "Subscribers", "Servers", "Clients"]
+        for intf_type in intf_types:
+            if intf_type in source:
+                if intf_type not in target:
+                    target[intf_type] = source[intf_type]
+                    continue
+                for intf in source[intf_type]:
+                    if intf not in target[intf_type]:
+                        target[intf_type].append(source[intf_type])
+
+
+    def do_generate_config(self, components, instances, reset):
         """Generate the consolidated config file
 
         :param components: list of component names
@@ -77,7 +97,7 @@ class Builder:
         :rtype: str
         """
         if Util.is_busy():
-            return False, "busy", ""
+            return False, Util.BUSY, ""
 
         status, error_detail = self.create_usecase_yml_file(
                 components, self.util.TEMP_USECASE_FILE_PATH)
@@ -94,8 +114,9 @@ class Builder:
             return False, error_detail, None
 
         os.chdir(self.util.EII_BUILD_PATH)
-        # Save old config
-        status, error_detail, old_config = self.util.get_consolidated_config()
+        if reset is False:
+            # Save old config
+            status, error_detail, old_config = self.util.get_consolidated_config()
         v_str = "-v{}".format(instances) if instances > 1 else ""
         status, error_detail, _ = self.util.os_command_in_host(
                 'cd {}/build && sudo -E python3 builder.py -f {} {}' \
@@ -110,13 +131,16 @@ class Builder:
             error_detail = "error: failed to retrieve eii_config"
             self.util.logger.error(error_detail)
             return False, error_detail, None
+        if reset is False:
+            # Apply saved config to the new config
+            for component in old_config:
+                if component in new_config:
+                    if component.endswith("/config"):
+                        new_config[component] = old_config[component]
+                    elif component.endswith("/interfaces"):
+                        self.merge_interfaces(new_config[component], old_config[component])
 
-        # Apply saved config to the new config
-        for component in old_config:
-            if component in new_config:
-                new_config[component] = old_config[component]
-
-        status, error_detail = self.util.store_consolidated_config(new_config)
+            status, error_detail = self.util.store_consolidated_config(new_config)
         return status, error_detail, new_config
 
 
@@ -170,11 +194,10 @@ class Builder:
         :rtype: str
         """
         if Util.is_busy():
-            return False, "busy"
+            return False, Util.BUSY
 
         status = True
         error_detail = ""
-        print(config)
         try:
             status, error_detail, eii_config_str = self.util.load_file(
                     self.util.EII_CONFIG_PATH)
@@ -210,7 +233,7 @@ class Builder:
         status = False
         error_detail = ""
         try:
-            with open(path, "r", encoding="utf-8") as reader:
+            with open(path, "r", encoding=Util.ENCODING) as reader:
                 for line in reader.readlines():
                     key_value = line.strip().split("=")
                     if status or key_value is None or key_value[0] != key:
@@ -218,7 +241,7 @@ class Builder:
                         continue
                     out = out + "{}={}\n".format(key, value)
                     status = True
-            with open(path, "w", encoding="utf-8") as writer:
+            with open(path, "w", encoding=Util.ENCODING) as writer:
                 writer.writelines(out)
         except Exception as exception:
             status = False
@@ -234,7 +257,8 @@ class Builder:
         self.util.logger.info("Provisioning...")
         status, error_out, _ = self.util.os_command_in_host(
                 'cd {}/build/provision && sudo ./provision.sh ' \
-                '../docker-compose.yml'.format(self.util.host_eii_dir))
+                '../docker-compose.yml > {} 2>&1'.format(self.util.host_eii_dir,
+                Util.LOGFILE_PROVISION))
         if not status:
             Util.set_state(Util.PROVISION, 0, "Failed")
             error_detail = "error: provisioning FAILED!: {}".format(error_out)
@@ -255,7 +279,7 @@ class Builder:
         :rtype: str
         """
         if Util.is_busy():
-            return False, "busy", ""
+            return False, Util.BUSY, ""
 
         Util.set_state(Util.PROVISION, 0)
         status = False
@@ -285,6 +309,7 @@ class Builder:
         """Get list of services from specified docker-compose.yml file
 
         :param yml: path to docker-compose.yml
+        :type yml: str
         :return: status of operation
         :rtype: bool
         :return: error description
@@ -295,7 +320,7 @@ class Builder:
         services = []
         error_detail = ""
         try:
-            with open(yml, 'r', encoding='utf-8') as reader:
+            with open(yml, 'r', encoding=Util.ENCODING) as reader:
                 data = yaml.safe_load(reader)
                 if "services" not in data:
                     self.util.logger.error('Invalid yaml file: No services defined')
@@ -333,13 +358,23 @@ class Builder:
 
         num_services = len(services_list)
         i = 0
-        self.util.store_file(self.util.LOGFILE, "", True)
+        status, error_out, _ = self.util.os_command_in_host(
+                "rm -f {}/build/{}".format(self.util.host_eii_dir,
+                    Util.LOGFILE_BUILD))
+        if status is False:
+            Util.set_state(Util.BUILD, 0, "Failed")
+            self.util.logger.error(
+                    "Build FAILED: Failed to remove build log file: %s", error_out)
+            self.threads[Util.BUILD][Util.ALIVE] = False
+            return
+
         for service in services_list:
             if not self.threads[Util.BUILD][Util.ALIVE]:
                 break
             status, error_out, _ = self.util.os_command_in_host(
                 'cd {}/build && docker-compose -f docker-compose-build.yml ' \
-                'build {} {}'.format(self.util.host_eii_dir, no_cache_str, service))
+                'build {} {} >> {} 2>&1'.format(self.util.host_eii_dir,
+                    no_cache_str, service, Util.LOGFILE_BUILD))
             if status is False:
                 Util.set_state(Util.BUILD, 0, "Failed")
                 self.util.logger.error("Build FAILED: %s", error_out)
@@ -364,11 +399,158 @@ class Builder:
         :rtype: str
         """
         if Util.is_busy():
-            return False, "busy", ""
+            return False, Util.BUSY, ""
 
+        Util.set_state(Util.BUILD, 0)
         self.util.logger.info("Building...")
         self.threads[Util.BUILD][Util.THREAD] = Thread(target=self.builder_thread,
                 args=(services, no_cache))
         self.threads[Util.BUILD][Util.ALIVE] = True
         self.threads[Util.BUILD][Util.THREAD].start()
         return True, "", ""
+
+
+    def do_get_logs_base64(self, tasks):
+        """Get logs for the specified tasks
+
+        :param tasks: List of tasks
+        :type tasks: [str]
+        :return: status of operation
+        :rtype: bool
+        :return: error description
+        :rtype: str
+        :return: logs
+        :rtype: dict
+        """
+        logs = {}
+        for task in tasks:
+            if task == Util.PROVISION:
+                log_file = Util.EII_PROVISION_PATH + Util.LOGFILE_PROVISION
+            elif task == Util.BUILD:
+                log_file = Util.EII_BUILD_PATH + Util.LOGFILE_BUILD
+            else:
+                error_detail = "Unknown task: {}".format(task)
+                self.util.logger.error(error_detail)
+                return False, error_detail, {}
+
+            status, error_detail, data = self.util.load_file(log_file)
+            if status is False:
+                self.util.logger.error("Failed to load log file: %s", log_file)
+                logs[task] = ""
+                continue
+            logs[task] = base64.b64encode(bytes(data, Util.ENCODING)).decode(Util.ENCODING)
+        return True, "", logs
+
+
+    def do_generate_udf_config(self, path):
+        """Generate config for the specified UDF path
+
+        :param path: Path to UDF, relative to the IEdgeInsights directory
+        :type tasks: [str]
+        :return: status of operation
+        :rtype: bool
+        :return: error description
+        :rtype: str
+        :return: UDF configuration
+        :rtype: dict
+        """
+        config = {}
+        UDF_BASE_PATH = "common/video/udfs/"
+        CONSTR_PREFIX = "def__init__(self"
+        UDF_SIGNATURE = "classUdf:"
+
+        # Trim leading / from path, if exist
+        if path.startswith("/"):
+            path = path[1:]
+        if not path.startswith(UDF_BASE_PATH):
+            error_detail = "Invalid UDF path: {}".format(path)
+            self.util.logger.error(error_detail)
+            return False, error_detail, {}
+
+        try:
+            # Extract UDF type from path
+            udf_path = path[len(UDF_BASE_PATH):]
+            tokens = udf_path.split("/")
+            # Validate UDF path
+            if tokens is None or len(tokens) < 2 or tokens[1].strip() == "":
+                error_detail = "Invalid UDF path: {}".format(path)
+                return False, error_detail, {}
+            config["type"] = tokens[0]
+            # Extract/generate UDF name from path
+            # for e.g. pcb/pcb_classifier.py => pcb.pcb_classifier
+            udf_name = tokens[1]
+            for token in tokens[2:]:
+                udf_name = udf_name + "." + token
+            extn_pos = udf_name.rfind(".")
+            config["name"] = udf_name if extn_pos < 0 else udf_name[:extn_pos]
+
+            validated_udf = False
+            found_params = False
+            if config["type"] == "python":
+                # Parse the UDF code to extract the constructor params. 
+                # All of these params will go to the UDF config
+                with open(Util.EII_DIR + path, "r", encoding=Util.ENCODING) as filehandle:
+                    for line in filehandle:
+                        code = line.strip()
+                        # Make sure the udf has the keyword 'class Udf'
+                        if not validated_udf and "".join(code.split()) == UDF_SIGNATURE:
+                            validated_udf = True
+                        if not validated_udf:
+                            continue
+                        code = "".join(code.split())
+                        if not found_params:
+                            # Make sure the udf has the constructor defined
+                            if not code.startswith(CONSTR_PREFIX):
+                                continue
+                            found_params = True
+                            code = code[len(CONSTR_PREFIX):]
+                        # Tokenize and extarct the constructor params
+                        endpos = code.find("):")
+                        if endpos >= 0:
+                            code = code[:endpos]
+                        params = code.split(",")
+                        for param in params:
+                            if param != "":
+                                config[param] = ""
+                        if endpos >= 0:
+                            break
+        except Exception as exception:
+            error_detail = "Failed to parse udf: {}. {}".format(path, exception)
+            self.util.logger.error(error_detail)
+            return False, error_detail, {}
+        return True, "", config
+
+
+    def do_run(self, action):
+        """Start/stop/restart containers in the usecase
+
+        :param action: Action to be performed: start/stop/restart
+        "type action: str
+        :return: status of operation
+        :rtype: bool
+        :return: error description
+        :rtype: str
+        """
+        allowed_actions = [Util.START, Util.STOP, Util.RESTART]
+        if action not in allowed_actions:
+            error_detail = "error: Invalid action: {}".format(action)
+            self.util.logger.error(error_detail)
+            return False, error_detail
+
+        if Util.is_busy():
+            return False, Util.BUSY
+
+        if action == Util.START:
+            cmd = "cd {}/build && docker-compose up -d".format(self.util.host_eii_dir)
+        elif action == Util.STOP:
+            cmd = "cd {}/build && docker-compose down".format(self.util.host_eii_dir)
+        elif action == Util.RESTART:
+            cmd = "cd {}/build && docker-compose down && docker-compose up -d".format(
+                    self.util.host_eii_dir)
+
+        status, error_detail, _ = self.util.os_command_in_host(cmd)
+        if not status:
+            error_detail = "error: failed to perform {}".format(action)
+            self.util.logger.error(error_detail)
+            return False, error_detail
+        return status, ""

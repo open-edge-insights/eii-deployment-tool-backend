@@ -21,6 +21,7 @@
 """ Main module of Deployment tool backend """
 
 import sys
+import os
 import json
 from typing import List, Optional, Dict
 import uvicorn
@@ -67,14 +68,25 @@ usecases
 
 ## UDF
 
-* **List files, directories*
+* **List files, directories**
+* **Generate UDF Config**
+
+## Logging
+
+* **Get Logs**
 
 ## Provision & Build
 
 * **Provision**
 * **Build**
 * **Get status**
+* **Get logs**
 
+## Running
+
+* **Start**
+* **Stop**
+* **Restart**
 
 """
 app = FastAPI(
@@ -214,12 +226,15 @@ class ComponentInfo(BaseModel): # pylint: disable=too-few-public-methods
     names: List[str] = Field(..., title="Component names", min_length=1, max_length=64,
             min_items=1, max_items=96)
     instance_count: int = Field(..., title="Number of instances", gt=0, lt=33)
+    reset: bool = Field(..., title="Whether to reset/ignore previous configuration - "
+            "do not retain previos configuration")
     class Config: # pylint: disable=too-few-public-methods
         """example data """
         schema_extra = {
             "example": {
                 "names": ["VideoIngestion", "VideoAnalytics"],
-                "instance_count": 2
+                "instance_count": 2,
+                "reset": True
             }
         }
 
@@ -273,6 +288,40 @@ class BuildInfo(BaseModel): # pylint: disable=too-few-public-methods
         }
 
 
+class TaskInfo(BaseModel): # pylint: disable=too-few-public-methods
+    """Class that defines param to use with */getlogs/ API
+       name param specifies the name of the task
+
+    """
+    names: List[str] = Field(..., title="List of tasks", min_length=1, max_length=32,
+            min_items=1, max_items=2)
+    class Config: # pylint: disable=too-few-public-methods
+        """example data
+        """
+        schema_extra = {
+            "example": {
+                "names": ["provision", "build"]
+            }
+        }
+
+
+class UdfInfo(BaseModel): # pylint: disable=too-few-public-methods
+    """Class that defines param to use with */udf/config/generate/ API
+       path param specifies the path to the udf file
+
+    """
+    path: str = Field(..., title="Path to UDF file relative to IEdgeInsights direcotry",
+            min_length=1, max_length=256)
+    class Config: # pylint: disable=too-few-public-methods
+        """example data
+        """
+        schema_extra = {
+            "example": {
+                "path": "common/video/udfs/python/pcb/pcb_classifier.py"
+            }
+        }
+
+
 #
 # Response class definitions
 #
@@ -282,7 +331,6 @@ class Response200Status(BaseModel): # pylint: disable=too-few-public-methods
     """
     status: bool = Field(..., title="Error status")
     error_detail: str = Field(..., title="Error detail")
-    console: str = Field(..., title="Console log")
 
 
 class Response200(BaseModel): # pylint: disable=too-few-public-methods
@@ -451,7 +499,8 @@ def generate_config(comp_info: ComponentInfo,
     _ = token
     status, error_detail, config = builder.do_generate_config(
                                         comp_info.names,
-                                        comp_info.instance_count)
+                                        comp_info.instance_count,
+                                        comp_info.reset)
     return util.make_response_json(status, config, error_detail)
 
 
@@ -702,6 +751,78 @@ def getstatus(token: str=Depends(Authentication.validate_session)):
     return response
 
 
+@app.post('/eii/ui/getlogs',
+    response_model=Response200,
+    responses={200: {"model": Response200}},
+    description="Get log"
+)
+def getlogs(task_info: TaskInfo,
+        token: str=Depends(Authentication.validate_session)):
+    """"Get logs for specified tasks
+
+    :param task_info: Names of task for which log need to be fetched
+    :type task_info: TaskInfo
+    :param token: session token returned internally
+    :type token: str
+    :return response: API response
+    :rtype Response200
+    """
+    _ = token
+    status, error_detail, data = builder.do_get_logs_base64(task_info.names)
+    response = util.make_response_json(status, data, error_detail)
+    return response
+
+
+@app.post('/eii/ui/udf/config/generate',
+    response_model=Response200,
+    responses={200: {"model": Response200}},
+    description="Generate UDF config"
+)
+def generate_udf_config(udf_info: UdfInfo,
+        token: str=Depends(Authentication.validate_session)):
+    """"Generate UDF config for the specified UDF path
+
+    :param udf_info: Path to a UDF relative to IEdgeInsights directory
+    :type udf_info: UdfInfo
+    :param token: session token returned internally
+    :type token: str
+    :return response: API response
+    :rtype Response200
+    """
+    _ = token
+    status, error_detail, data = builder.do_generate_udf_config(udf_info.path)
+    response = util.make_response_json(status, data, error_detail)
+    return response
+
+
+@app.post('/eii/ui/containers/{action}',
+    response_model=Response200,
+    responses={200: {"model": Response200}},
+    description="Starts, stops and restarts the all the containers in the usecase"
+)
+def containers_operate(action: str,
+        token: str=Depends(Authentication.validate_session)):
+    """Starts, stops and restarts the all the containers in the usecase
+    :param action: Action to be performed: start/stop/restart
+    :param token: session token returned internally
+    :type token: str
+    :return response: API response
+    :rtype Response200
+    """
+    _ = token
+    supported_actions = ["start", "stop", "restart"]
+
+    if action not in supported_actions:
+        return util.make_response_json(False, "", \
+                "Container API FAILED. invalid arguments. expected any of {}" \
+		.format(supported_actions))
+
+    response = {}
+    status, error_detail = builder.do_run(action)
+    response = util.make_response_json(status, error_detail, "")
+    return response
+
+
 if __name__ == '__main__':
     if len(sys.argv) != 3 or int(sys.argv[1]) <= 0:
         util.logger.error("Error: Invalid/missing arguments!")
@@ -718,4 +839,9 @@ if __name__ == '__main__':
             allow_methods=["GET", "POST"],
             allow_headers=[]
             )
-    uvicorn.run(app, host="0.0.0.0", port=server_port)
+    env_dev_mode = os.environ.get("dev_mode", "true")
+    if env_dev_mode == "true":
+        uvicorn.run(app, host="0.0.0.0", port=server_port)
+    else:
+        uvicorn.run(app, host="0.0.0.0", port=server_port,
+                ssl_keyfile="/run/secrets/key", ssl_certfile="/run/secrets/cert")

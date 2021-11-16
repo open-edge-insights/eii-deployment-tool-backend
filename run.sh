@@ -21,7 +21,6 @@
 # SOFTWARE.
 
 function setupHost() {
-    mkdir -p ../build/projects 
     # setup secure ssh
     if ! [ -f ./id_rsa.pub ];then
         echo "Generating ssh key..."
@@ -61,16 +60,25 @@ function create_docker_network() {
     fi
 }
 
+function check_certs() {
+    if [ ! -d ./certificates ]; then
+        sudo chmod auo+x ./gen_certs.sh
+        sudo ./gen_certs.sh
+        sudo chown -R $USER:$USER ./certificates
+    fi
+}
+
 sourceEnv
 
 if [ "$1" ==  "--build" -o "$1" == "-b" ]; then
-    create_docker_network
-    docker-compose down
-    setupHost
-    docker-compose build $2
+    create_docker_network && \
+    check_certs && \
+    docker-compose down && \
+    setupHost && \
+    docker-compose build $2 && \
     docker-compose up -d
 elif [ "$1" ==  "--restart" -o "$1" == "-r" ]; then
-    docker-compose down
+    docker-compose down && \
     docker-compose up -d
 elif [ "$1" ==  "--down" -o "$1" == "-d" ]; then
     docker-compose down

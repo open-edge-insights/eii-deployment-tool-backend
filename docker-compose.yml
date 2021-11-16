@@ -56,7 +56,7 @@ services:
       interval: 5m
     environment:
       AppName: "DeploymentToolBackend"
-      DEV_MODE: "true"
+      dev_mode: "false"
       PROFILING_MODE: ${PROFILING_MODE}
       no_proxy: ${eii_no_proxy}
       NO_PROXY: ${eii_no_proxy}
@@ -81,8 +81,15 @@ services:
       - "/dev:/dev"
     networks:
       - eii
+    secrets:
+      - cert
+      - key
 networks:
   eii:
     external:
       name: eii
-
+secrets:
+  cert:
+    file: certificates/server_cert.pem
+  key:
+    file: certificates/server_key.pem
