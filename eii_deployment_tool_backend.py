@@ -712,7 +712,7 @@ def provision(provision_info: ProvisionInfo,
 @app.post('/eii/ui/build',
     response_model=Response200,
     responses={200: {"model": Response200}},
-    description="Do Provisioning"
+    description="Do Build"
 )
 def build(build_info: BuildInfo,
         token: str=Depends(Authentication.validate_session)):
