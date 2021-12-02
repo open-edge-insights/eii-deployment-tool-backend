@@ -47,6 +47,9 @@ class Project():
         status, error_detail, config = util.get_consolidated_config(path)
         if status is False:
             util.logger.error("Failed to load project %s: %s", name, error_detail)
+        else:
+            status, error_detail = util.store_consolidated_config(config)
+
         return status, error_detail, config
 
 
