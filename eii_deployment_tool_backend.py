@@ -730,7 +730,7 @@ def build(build_info: BuildInfo,
     """
     _ = token
     status, error_detail, data = builder.do_build(
-            build_info.services, build_info.dev_mode, build_info.no_cache)
+            build_info.services, build_info.no_cache)
     response = util.make_response_json(status, data, error_detail)
     return response
 
