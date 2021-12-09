@@ -84,13 +84,15 @@ class Builder:
                         target[intf_type].append(source[intf_type])
 
 
-    def do_generate_config(self, components, instances, reset):
+    def do_generate_config(self, components, instances, dev_mode, reset):
         """Generate the consolidated config file
 
         :param components: list of component names
         :type name: [str]
         :param instances: no. of instances to generate
         :type instances: int
+	:param dev_mode: whether dev or prod mode
+	:type dev_mode: bool
         :return: status of operation
         :rtype: bool
         :return: error description
@@ -112,6 +114,17 @@ class Builder:
             error_detail = "unsupported multi-instance configuration"
             self.util.logger.error(error_detail)
             return False, error_detail, None
+
+        # Set DEV_MODE
+        key = "DEV_MODE"
+        value = "true" if dev_mode else "false"
+        env_path = self.util.EII_BUILD_PATH + '/.env'
+        status, error_out = self.update_env_file(env_path, key, value)
+        if status is False:
+            error_detail = "error: FAILE to set DEV_MODE in .env!: {}".format(
+                    error_out)
+            self.util.logger.error(error_detail)
+            return status, error_detail, None
 
         os.chdir(self.util.EII_BUILD_PATH)
         if reset is False:

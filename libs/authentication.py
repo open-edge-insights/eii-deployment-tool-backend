@@ -28,7 +28,8 @@ from fastapi.security import APIKeyCookie
 class Authentication():
     """ Class for grouping authentication related functions and data """
     tokens = {}
-    session_cookie = APIKeyCookie(name="session")
+    SESSION_NAME = "dt_session"
+    session_cookie = APIKeyCookie(name=SESSION_NAME)
     def __init__(self):
         pass
 

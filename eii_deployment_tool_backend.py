@@ -226,6 +226,7 @@ class ComponentInfo(BaseModel): # pylint: disable=too-few-public-methods
     names: List[str] = Field(..., title="Component names", min_length=1, max_length=64,
             min_items=1, max_items=96)
     instance_count: int = Field(..., title="Number of instances", gt=0, lt=33)
+    dev_mode: Optional[bool] = Field(True, title="true for dev mode, false for prod mode")
     reset: bool = Field(..., title="Whether to reset/ignore previous configuration - "
             "do not retain previos configuration")
     class Config: # pylint: disable=too-few-public-methods
@@ -234,6 +235,7 @@ class ComponentInfo(BaseModel): # pylint: disable=too-few-public-methods
             "example": {
                 "names": ["VideoIngestion", "VideoAnalytics"],
                 "instance_count": 2,
+                "dev_mode": True,
                 "reset": True
             }
         }
@@ -383,7 +385,7 @@ def login(creds: Credentials):
                         ""
                     )
                )
-    response.set_cookie("session",
+    response.set_cookie(Authentication.SESSION_NAME,
                         token,
                         max_age=1800,
                         expires=1800)
@@ -412,7 +414,7 @@ def logout(token: str = Depends(Authentication.validate_session)):
                         ""
                     )
                )
-    response.delete_cookie("session")
+    response.delete_cookie(Authentication.SESSION_NAME)
     return response
 
 
@@ -500,6 +502,7 @@ def generate_config(comp_info: ComponentInfo,
     status, error_detail, config = builder.do_generate_config(
                                         comp_info.names,
                                         comp_info.instance_count,
+                			comp_info.dev_mode,
                                         comp_info.reset)
     return util.make_response_json(status, config, error_detail)
 
@@ -727,7 +730,7 @@ def build(build_info: BuildInfo,
     """
     _ = token
     status, error_detail, data = builder.do_build(
-            build_info.services, build_info.no_cache)
+            build_info.services, build_info.dev_mode, build_info.no_cache)
     response = util.make_response_json(status, data, error_detail)
     return response
 
