@@ -278,6 +278,7 @@ class BuildInfo(BaseModel): # pylint: disable=too-few-public-methods
 
     """
     services: List[str] = Field(..., title="Services to build")
+    sequential:  bool = Field(..., title="Build services individually in sequence")
     no_cache: Optional[bool] = Field(False, title="enable --no-cache")
     class Config: # pylint: disable=too-few-public-methods
         """example data
@@ -285,6 +286,7 @@ class BuildInfo(BaseModel): # pylint: disable=too-few-public-methods
         schema_extra = {
             "example": {
                 "services": ["*"],
+                "sequential": False,
                 "no_cache": False
             }
         }
@@ -730,7 +732,7 @@ def build(build_info: BuildInfo,
     """
     _ = token
     status, error_detail, data = builder.do_build(
-            build_info.services, build_info.no_cache)
+            build_info.services, build_info.sequential, build_info.no_cache)
     response = util.make_response_json(status, data, error_detail)
     return response
 

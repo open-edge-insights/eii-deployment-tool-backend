@@ -91,8 +91,8 @@ class Builder:
         :type name: [str]
         :param instances: no. of instances to generate
         :type instances: int
-	:param dev_mode: whether dev or prod mode
-	:type dev_mode: bool
+        :param dev_mode: whether dev or prod mode
+        :type dev_mode: bool
         :return: status of operation
         :rtype: bool
         :return: error description
@@ -347,16 +347,21 @@ class Builder:
         return status, error_detail, services
 
 
-    def builder_thread(self, services, no_cache):
+    def builder_thread(self, services, sequential, no_cache):
         """Thread for building
 
         :param services: List of services to be built or "*" for all services
         :type services: [str]
+        :param sequential: Whether to buid services one by one or as a whole
+        :type sequential: bool
         :param no_cache: whether to use --no-cache option with build
         :type no_cache: bool
         """
         no_cache_str = "--no-cache" if no_cache else ""
-        if services[0] == "*":
+        if services[0] != "*":
+            services_list = services
+            sequential = True
+        elif sequential:
             status, error_out, services_list = \
                 self.get_services_from_docker_compose_yml(self.util.EII_BUILD_PATH + \
                         '/docker-compose-build.yml')
@@ -366,11 +371,7 @@ class Builder:
                 Util.set_state(Util.BUILD, 0, "Failed")
                 self.threads[Util.BUILD][Util.ALIVE] = False
                 return
-        else:
-            services_list = services
 
-        num_services = len(services_list)
-        i = 0
         status, error_out, _ = self.util.os_command_in_host(
                 "rm -f {}/build/{}".format(self.util.host_eii_dir,
                     Util.LOGFILE_BUILD))
@@ -381,29 +382,46 @@ class Builder:
             self.threads[Util.BUILD][Util.ALIVE] = False
             return
 
-        for service in services_list:
-            if not self.threads[Util.BUILD][Util.ALIVE]:
-                break
+        if sequential:
+            num_services = len(services_list)
+            i = 0
+            for service in services_list:
+                if not self.threads[Util.BUILD][Util.ALIVE]:
+                    break
+                status, error_out, _ = self.util.os_command_in_host(
+                    'cd {}/build && docker-compose -f docker-compose-build.yml ' \
+                    'build {} {} >> {} 2>&1'.format(self.util.host_eii_dir,
+                        no_cache_str, service, Util.LOGFILE_BUILD))
+                if status is False:
+                    Util.set_state(Util.BUILD, 0, "Failed")
+                    self.util.logger.error("Build FAILED: %s", error_out)
+                    self.threads[Util.BUILD][Util.ALIVE] = False
+                    return
+                i = i + 1
+                Util.set_state(Util.BUILD, int((i*100)/num_services))
+        else:
+            Util.set_state(Util.BUILD, 50)
             status, error_out, _ = self.util.os_command_in_host(
                 'cd {}/build && docker-compose -f docker-compose-build.yml ' \
-                'build {} {} >> {} 2>&1'.format(self.util.host_eii_dir,
-                    no_cache_str, service, Util.LOGFILE_BUILD))
+                'build {} >> {} 2>&1'.format(self.util.host_eii_dir,
+                    no_cache_str, Util.LOGFILE_BUILD))
             if status is False:
                 Util.set_state(Util.BUILD, 0, "Failed")
                 self.util.logger.error("Build FAILED: %s", error_out)
                 self.threads[Util.BUILD][Util.ALIVE] = False
                 return
-            i = i + 1
-            Util.set_state(Util.BUILD, int((i*100)/num_services))
+
         Util.set_state(Util.BUILD, 100, "Success")
         self.threads[Util.BUILD][Util.ALIVE] = False
 
 
-    def do_build(self, services, no_cache):
+    def do_build(self, services, sequential, no_cache):
         """Do build
 
         :param services: List of services to be built or "*" for all services
         :type services: [str]
+        :param sequential: Whether to buid services one by one or as a whole
+        :type sequential: bool
         :param no_cache: whether to use --no-cache option with build
         :type no_cache: bool
         :return: status of operation
@@ -417,7 +435,7 @@ class Builder:
         Util.set_state(Util.BUILD, 0)
         self.util.logger.info("Building...")
         self.threads[Util.BUILD][Util.THREAD] = Thread(target=self.builder_thread,
-                args=(services, no_cache))
+                args=(services, sequential, no_cache))
         self.threads[Util.BUILD][Util.ALIVE] = True
         self.threads[Util.BUILD][Util.THREAD].start()
         return True, "", ""
