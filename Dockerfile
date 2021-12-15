@@ -38,7 +38,9 @@ RUN apt-get update && \
     libopencv-dev \
     python3-opencv \
     v4l-utils \
-    ssh && \
+    ssh \
+    rsync \
+    sshpass && \
     rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ARG CMAKE_INSTALL_PREFIX

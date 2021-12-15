@@ -34,6 +34,10 @@ function setupHost() {
         echo "Adding user $USER to sudoers..." 
         echo "$USER ALL=(ALL:ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/$USER
     fi
+    which sshpass
+    if ! [ "$?" -eq 0 ];then
+        sudo apt-get update && apt-get install sshpass
+    fi
 }
 
 

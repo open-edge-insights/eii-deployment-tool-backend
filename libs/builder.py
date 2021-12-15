@@ -33,7 +33,7 @@ class Builder:
     """
     def __init__(self):
         self.util = Util()
-        self.threads = {Util.BUILD: {}, Util.PROVISION: {}}
+        self.threads = {Util.BUILD: {}, Util.PROVISION: {}, Util.DEPLOY: {}}
         for key in self.threads:
             self.threads[key][Util.ALIVE] = False
 
@@ -441,6 +441,87 @@ class Builder:
         return True, "", ""
 
 
+    def deployer_thread(self, images, ip_address, username, password, path):
+        """Thread for deploying
+
+        :param images: List of docker images to be deployed
+        :type images: [str]
+        :param ip_address: Remote machine IP address
+        :type ip_address: str
+        :param username: Remote machine username
+        :type username: str
+        :param password: Remote machine password
+        :type password: str
+        :param path: Remote machine directory path where files need to be copied
+        :type path: str
+
+        """
+
+        # export images to remote machine
+        n_images = len(images)
+        i = 0
+        for image in images:
+            if not self.threads[Util.DEPLOY][Util.ALIVE]:
+                break
+            status, error_out, _ = self.util.os_command_in_host(
+                'docker save {} | bzip2 | sshpass -p "{}" ssh -o '
+                'StrictHostKeyChecking=no {}@{} docker load'.format(
+                    image, password, username, ip_address))
+            if status is False:
+                Util.set_state(Util.DEPLOY, 0, "Failed")
+                self.util.logger.error("Deploy FAILED: Reason: %s", error_out)
+                self.threads[Util.DEPLOY][Util.ALIVE] = False
+                return
+            i = i + 1
+            Util.set_state(Util.DEPLOY, (i*100)/(n_images + 1))
+
+        if not self.threads[Util.DEPLOY][Util.ALIVE]:
+            Util.set_state(Util.DEPLOY, 0, "Failed")
+            return
+
+        status, error_out, _ = self.util.os_command(
+            'sshpass -p "{}" rsync -e "ssh -o StrictHostKeyChecking=no" -z {} {}@{}:{}'
+            .format(password, Util.EII_BUILD_PATH, username, ip_address, path))
+        if status is False:
+            Util.set_state(Util.DEPLOY, 0, "Failed")
+            self.util.logger.error("Deploy FAILED: Reason: %s", error_out)
+            self.threads[Util.DEPLOY][Util.ALIVE] = False
+            return
+
+        Util.set_state(Util.DEPLOY, 100, "Success")
+        self.threads[Util.DEPLOY][Util.ALIVE] = False
+
+
+    def do_deploy(self, images, ip_address, username, password, path):
+        """Do deploy
+
+        :param images: List of docker images to be deployed
+        :type images: [str]
+        :param ip_address: Remote machine IP address
+        :type ip_address: str
+        :param username: Remote machine username
+        :type username: str
+        :param password: Remote machine password
+        :type password: str
+        :param path: Remote machine directory path where files need to be copied
+        :type path: str
+        :return: status of operation
+        :rtype: bool
+        :return: error description
+        :rtype: str
+        """
+        if Util.is_busy():
+            return False, Util.BUSY
+
+        Util.set_state(Util.DEPLOY, 0)
+        self.util.logger.info("Deploying...")
+        self.threads[Util.DEPLOY][Util.THREAD] = Thread(target=self.deployer_thread,
+                args=(images, ip_address, username, password, path))
+        self.threads[Util.DEPLOY][Util.ALIVE] = True
+        self.threads[Util.DEPLOY][Util.THREAD].start()
+        return True, ""
+
+
     def do_get_logs_base64(self, tasks):
         """Get logs for the specified tasks
 
@@ -518,7 +599,7 @@ class Builder:
             validated_udf = False
             found_params = False
             if config["type"] == "python":
-                # Parse the UDF code to extract the constructor params. 
+                # Parse the UDF code to extract the constructor params.
                 # All of these params will go to the UDF config
                 with open(Util.EII_DIR + path, "r", encoding=Util.ENCODING) as filehandle:
                     for line in filehandle:

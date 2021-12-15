@@ -57,6 +57,7 @@ class Util:
     FAILED="Failed"
     PROVISION="provision"
     BUILD="build"
+    DEPLOY="deploy"
     ALIVE="alive"
     THREAD="thread"
     FRAMES="frames"

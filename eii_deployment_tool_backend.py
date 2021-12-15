@@ -88,6 +88,10 @@ usecases
 * **Stop**
 * **Restart**
 
+## Deploy
+
+* **deploy**
+
 """
 app = FastAPI(
     title = "Intel© Edge Insights for Industrial (EII) REST APIs",
@@ -288,6 +292,31 @@ class BuildInfo(BaseModel): # pylint: disable=too-few-public-methods
                 "services": ["*"],
                 "sequential": False,
                 "no_cache": False
+            }
+        }
+
+
+class DeployInfo(BaseModel): # pylint: disable=too-few-public-methods
+    """Class that defines param to use with */deploy/ API
+
+    """
+    images: List[str] =  Field(..., title="List of docker images to be  deployed")
+    ip: str = Field(..., title="Remote machine IP address")
+    username:  str = Field(..., title="Remote machine username")
+    password:  str = Field(..., title="Remote machine password")
+    path:  str = Field(..., title="Remote machine directory path where files need to be copied")
+    class Config: # pylint: disable=too-few-public-methods
+        """example data
+        """
+        schema_extra = {
+            "example": {
+                "images": ["ia_video_ingestion",
+                           "ia_video_analytics",
+                           "ia_web_visualizer"],
+                "ip": "127.0.0.1",
+                "username": "username",
+                "password": "password",
+                "path": "/home/user/"
             }
         }
 
@@ -504,7 +533,7 @@ def generate_config(comp_info: ComponentInfo,
     status, error_detail, config = builder.do_generate_config(
                                         comp_info.names,
                                         comp_info.instance_count,
-                			comp_info.dev_mode,
+                                        comp_info.dev_mode,
                                         comp_info.reset)
     return util.make_response_json(status, config, error_detail)
 
@@ -617,7 +646,7 @@ def camera_operate(action: str,
     if action not in supported_actions:
         return util.make_response_json(False, "", \
                 "Camera API FAILED. invalid arguments. expected any of {}" \
-		.format(supported_actions))
+                .format(supported_actions))
 
     response = {}
     if action == "start":
@@ -820,11 +849,38 @@ def containers_operate(action: str,
     if action not in supported_actions:
         return util.make_response_json(False, "", \
                 "Container API FAILED. invalid arguments. expected any of {}" \
-		.format(supported_actions))
+                .format(supported_actions))
 
     response = {}
     status, error_detail = builder.do_run(action)
     response = util.make_response_json(status, error_detail, "")
+    return response
+
+
+@app.post('/eii/ui/deploy/remote',
+    response_model=Response200,
+    responses={200: {"model": Response200}},
+    description="Deploy to remote system"
+)
+def deploy(deploy_info: DeployInfo,
+        token: str=Depends(Authentication.validate_session)):
+    """"Do build
+
+    :param deploy_info: Remote machine info
+    :type deploy_info: DeployInfo
+    :param token: session token returned internally
+    :type token: str
+    :return response: API response
+    :rtype Response200
+    """
+    _ = token
+    status, error_detail = builder.do_deploy(
+        deploy_info.images,
+        deploy_info.ip,
+        deploy_info.username,
+        deploy_info.password,
+        deploy_info.path)
+    response = util.make_response_json(status, "", error_detail)
     return response
 
 
