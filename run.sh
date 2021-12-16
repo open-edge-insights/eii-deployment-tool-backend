@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 function setupHost() {
-    mkdir -p ../build/projects
+    mkdir -p ../build/.projects
     # setup secure ssh
     if ! [ -f ./id_rsa.pub ];then
         echo "Generating ssh key..."

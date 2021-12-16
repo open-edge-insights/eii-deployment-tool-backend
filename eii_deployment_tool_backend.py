@@ -75,9 +75,8 @@ usecases
 
 * **Get Logs**
 
-## Provision & Build
+## Build
 
-* **Provision**
 * **Build**
 * **Get status**
 * **Get logs**
@@ -227,12 +226,13 @@ class ComponentInfo(BaseModel): # pylint: disable=too-few-public-methods
     """ Class that defines component info param to use with */config/* APIs
 
     """
-    names: List[str] = Field(..., title="Component names", min_length=1, max_length=64,
-            min_items=1, max_items=96)
-    instance_count: int = Field(..., title="Number of instances", gt=0, lt=33)
+    names: List[str] = Field(..., title="Component names. If none specified previous " \
+            "list would be used", 
+            min_length=1, max_length=64, min_items=0, max_items=32)
+    instance_count: int = Field(..., title="Number of instances", gt=0, lt=16)
     dev_mode: Optional[bool] = Field(True, title="true for dev mode, false for prod mode")
     reset: bool = Field(..., title="Whether to reset/ignore previous configuration - "
-            "do not retain previos configuration")
+            "do not retain previous configuration")
     class Config: # pylint: disable=too-few-public-methods
         """example data """
         schema_extra = {
@@ -256,21 +256,6 @@ class ListFilesInfo(BaseModel): # pylint: disable=too-few-public-methods
         schema_extra = {
             "example": {
                 "path": "/common/video/udfs/"
-            }
-        }
-
-
-class ProvisionInfo(BaseModel): # pylint: disable=too-few-public-methods
-    """Class that defines param to use with */provision/ API
-
-    """
-    dev_mode: bool = Field(..., title="Is DEV_MODE enabled")
-    class Config: # pylint: disable=too-few-public-methods
-        """example data
-        """
-        schema_extra = {
-            "example": {
-                "dev_mode": True
             }
         }
 
@@ -301,7 +286,7 @@ class DeployInfo(BaseModel): # pylint: disable=too-few-public-methods
 
     """
     images: List[str] =  Field(..., title="List of docker images to be  deployed")
-    ip: str = Field(..., title="Remote machine IP address")
+    ip_address: str = Field(..., title="Remote machine IP address")
     username:  str = Field(..., title="Remote machine username")
     password:  str = Field(..., title="Remote machine password")
     path:  str = Field(..., title="Remote machine directory path where files need to be copied")
@@ -313,7 +298,7 @@ class DeployInfo(BaseModel): # pylint: disable=too-few-public-methods
                 "images": ["ia_video_ingestion",
                            "ia_video_analytics",
                            "ia_web_visualizer"],
-                "ip": "127.0.0.1",
+                "ip_address": "127.0.0.1",
                 "username": "username",
                 "password": "password",
                 "path": "/home/user/"
@@ -333,7 +318,7 @@ class TaskInfo(BaseModel): # pylint: disable=too-few-public-methods
         """
         schema_extra = {
             "example": {
-                "names": ["provision", "build"]
+                "names": ["build"]
             }
         }
 
@@ -721,28 +706,6 @@ def list_files(list_files_info: ListFilesInfo,
     return response
 
 
-@app.post('/eii/ui/provision',
-    response_model=Response200,
-    responses={200: {"model": Response200}},
-    description="Do Provisioning"
-)
-def provision(provision_info: ProvisionInfo,
-        token: str=Depends(Authentication.validate_session)):
-    """"Do provisioning
-
-    :param dev_mode: Provision in dev mode ot prod mode
-    :type dev_mode: bool
-    :param token: session token returned internally
-    :type token: str
-    :return response: API response
-    :rtype Response200
-    """
-    _ = token
-    status, error_detail, data = builder.do_provision(provision_info.dev_mode)
-    response = util.make_response_json(status, data, error_detail)
-    return response
-
-
 @app.post('/eii/ui/build',
     response_model=Response200,
     responses={200: {"model": Response200}},
@@ -769,7 +732,7 @@ def build(build_info: BuildInfo,
 @app.get('/eii/ui/status',
     response_model=Response200,
     responses={200: {"model": Response200}},
-    description="Do Provisioning"
+    description="Get status"
 )
 def getstatus(token: str=Depends(Authentication.validate_session)):
     """"Get status
@@ -876,7 +839,7 @@ def deploy(deploy_info: DeployInfo,
     _ = token
     status, error_detail = builder.do_deploy(
         deploy_info.images,
-        deploy_info.ip,
+        deploy_info.ip_address,
         deploy_info.username,
         deploy_info.password,
         deploy_info.path)

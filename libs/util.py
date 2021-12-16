@@ -35,12 +35,10 @@ class Util:
 
     EII_DIR = "/app/IEdgeInsights/"
     EII_BUILD_PATH = EII_DIR + "build/"
-    EII_PROVISION_PATH = EII_BUILD_PATH + "provision/"
-    EII_CONFIG_PATH = EII_PROVISION_PATH + "config/eii_config.json"
-    EII_PROJECTS_PATH = EII_BUILD_PATH + "projects/"
+    EII_CONFIG_PATH = EII_BUILD_PATH + "eii_config.json"
+    EII_PROJECTS_PATH = EII_BUILD_PATH + ".projects/"
     TEMP_USECASE_FILE_NAME = ".usecasex.yml"
     TEMP_USECASE_FILE_PATH = EII_BUILD_PATH + TEMP_USECASE_FILE_NAME
-    LOGFILE_PROVISION = ".provision.log"
     LOGFILE_BUILD = ".build.log"
     JSON_EXT = ".json"
     HOST_IP = "172.17.0.1"
@@ -55,7 +53,6 @@ class Util:
     IN_PROGRESS="In Progress"
     SUCCESS="Success"
     FAILED="Failed"
-    PROVISION="provision"
     BUILD="build"
     DEPLOY="deploy"
     ALIVE="alive"

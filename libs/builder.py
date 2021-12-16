@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-""" Module for handling configuration, build and provisioning """
+""" Module for handling configuration, build and deploy """
 
 import os
 import json
@@ -28,12 +28,12 @@ import yaml
 from .util import Util
 
 class Builder:
-    """This class will have functions related to build and provisioning
+    """This class will have functions related to build and deploy
 
     """
     def __init__(self):
         self.util = Util()
-        self.threads = {Util.BUILD: {}, Util.PROVISION: {}, Util.DEPLOY: {}}
+        self.threads = {Util.BUILD: {}, Util.DEPLOY: {}}
         for key in self.threads:
             self.threads[key][Util.ALIVE] = False
 
@@ -59,7 +59,7 @@ class Builder:
                     fyml.write("- {}\n".format(component))
         except Exception as exception:
             error_detail = "exception while creating usecase yml file: {}".format(
-                    exception)
+                exception)
             self.util.logger.error(error_detail)
             status = False
         return status, error_detail
@@ -101,19 +101,20 @@ class Builder:
         if Util.is_busy():
             return False, Util.BUSY, ""
 
-        status, error_detail = self.create_usecase_yml_file(
+        if len(components) > 0:
+            status, error_detail = self.create_usecase_yml_file(
                 components, self.util.TEMP_USECASE_FILE_PATH)
-        if not status:
-            return False, error_detail, None
-        vi_exists = False
-        for component in components:
-            if component.find("VideoIngestion") == 0:
-                vi_exists = True
-                break
-        if instances > 1 and vi_exists is False:
-            error_detail = "unsupported multi-instance configuration"
-            self.util.logger.error(error_detail)
-            return False, error_detail, None
+            if not status:
+                return False, error_detail, None
+            vi_exists = False
+            for component in components:
+                if component.find("VideoIngestion") == 0:
+                    vi_exists = True
+                    break
+            if instances > 1 and vi_exists is False:
+                error_detail = "unsupported multi-instance configuration"
+                self.util.logger.error(error_detail)
+                return False, error_detail, None
 
         # Set DEV_MODE
         key = "DEV_MODE"
@@ -122,7 +123,7 @@ class Builder:
         status, error_out = self.update_env_file(env_path, key, value)
         if status is False:
             error_detail = "error: FAILE to set DEV_MODE in .env!: {}".format(
-                    error_out)
+                error_out)
             self.util.logger.error(error_detail)
             return status, error_detail, None
 
@@ -132,9 +133,9 @@ class Builder:
             status, error_detail, old_config = self.util.get_consolidated_config()
         v_str = "-v{}".format(instances) if instances > 1 else ""
         status, error_detail, _ = self.util.os_command_in_host(
-                'cd {}/build && sudo -E python3 builder.py -f {} {}' \
-                .format(self.util.host_eii_dir,
-                    self.util.TEMP_USECASE_FILE_NAME, v_str))
+            'cd {}/build && source ./source.sh && ' \
+            'sudo -E python3 builder.py -f {} {}' \
+            .format(self.util.host_eii_dir, self.util.TEMP_USECASE_FILE_NAME, v_str))
         if not status:
             error_detail = "error: failed to generate eii_config"
             self.util.logger.error(error_detail)
@@ -187,7 +188,7 @@ class Builder:
                         config[key].update({subkey: cconfig[config_key]})
                 except Exception as exception:
                     error_detail = "Parse error. Invalid EII config file!: {}".format(
-                                                exception)
+                        exception)
                     self.util.logger.error(error_detail)
                     status = False
                     config = {}
@@ -213,7 +214,7 @@ class Builder:
         error_detail = ""
         try:
             status, error_detail, eii_config_str = self.util.load_file(
-                    self.util.EII_CONFIG_PATH)
+                self.util.EII_CONFIG_PATH)
             if status:
                 eii_config = json.loads(eii_config_str)
                 for service in config:
@@ -225,8 +226,8 @@ class Builder:
             error_detail = "Exception while updating EII config: {}".format(exception)
             self.util.logger.error(error_detail)
             status = False
-
         return status, error_detail
+
 
     def update_env_file(self, path, key, value):
         """Updates an env file with 'key=value' pairs
@@ -259,63 +260,8 @@ class Builder:
         except Exception as exception:
             status = False
             error_detail = "error: FAILED to update env file: {}".format(
-                    exception)
+                exception)
         return status, error_detail
-
-
-    def provision_thread(self):
-        """Thread for Provisioning
-
-        """
-        self.util.logger.info("Provisioning...")
-        status, error_out, _ = self.util.os_command_in_host(
-                'cd {}/build/provision && sudo ./provision.sh ' \
-                '../docker-compose.yml > {} 2>&1'.format(self.util.host_eii_dir,
-                Util.LOGFILE_PROVISION))
-        if not status:
-            Util.set_state(Util.PROVISION, 0, "Failed")
-            error_detail = "error: provisioning FAILED!: {}".format(error_out)
-            self.util.logger.error(error_detail)
-        else:
-            Util.set_state(Util.PROVISION, 100, "Success")
-        self.threads[Util.PROVISION][Util.ALIVE] = False
-
-
-    def do_provision(self, dev_mode):
-        """Do provision
-
-        :param dev_mode: Whether DEV_MODE need to be set to "true" or "false"
-        :type dev_mode: bool
-        :return: status of operation
-        :rtype: bool
-        :return: error description
-        :rtype: str
-        """
-        if Util.is_busy():
-            return False, Util.BUSY, ""
-
-        Util.set_state(Util.PROVISION, 0)
-        status = False
-        error_detail = ""
-        self.util.logger.info("Setting provisioning mode...")
-        # Set DEV_MODE
-        key = "DEV_MODE"
-        value = "true" if dev_mode else "false"
-        env_path = self.util.EII_BUILD_PATH + '/.env'
-        status, error_out = self.update_env_file(env_path, key, value)
-        if status is False:
-            error_detail = "error: FAILE to set DEV_MODE in .env!: {}".format(
-                    error_out)
-            self.util.logger.error(error_detail)
-            Util.set_state(Util.PROVISION, 0, "Failed")
-            return status, error_detail, ""
-
-        Util.set_state(Util.PROVISION, 10)
-        self.threads[Util.PROVISION][Util.THREAD] = Thread(target=self.provision_thread)
-        self.threads[Util.PROVISION][Util.ALIVE] = True
-        self.threads[Util.PROVISION][Util.THREAD].start()
-        status = True
-        return status, error_detail, ""
 
 
     def get_services_from_docker_compose_yml(self, yml):
@@ -367,18 +313,17 @@ class Builder:
                         '/docker-compose-build.yml')
             if status is False:
                 self.util.logger.error("Build FAILED: failed to parse yml file: %s",
-                            error_out)
+                                       error_out)
                 Util.set_state(Util.BUILD, 0, "Failed")
                 self.threads[Util.BUILD][Util.ALIVE] = False
                 return
 
         status, error_out, _ = self.util.os_command_in_host(
-                "rm -f {}/build/{}".format(self.util.host_eii_dir,
-                    Util.LOGFILE_BUILD))
+            "rm -f {}/build/{}".format(self.util.host_eii_dir, Util.LOGFILE_BUILD))
         if status is False:
             Util.set_state(Util.BUILD, 0, "Failed")
             self.util.logger.error(
-                    "Build FAILED: Failed to remove build log file: %s", error_out)
+                "Build FAILED: Failed to remove build log file: %s", error_out)
             self.threads[Util.BUILD][Util.ALIVE] = False
             return
 
@@ -391,7 +336,9 @@ class Builder:
                 status, error_out, _ = self.util.os_command_in_host(
                     'cd {}/build && docker-compose -f docker-compose-build.yml ' \
                     'build {} {} >> {} 2>&1'.format(self.util.host_eii_dir,
-                        no_cache_str, service, Util.LOGFILE_BUILD))
+                                                    no_cache_str,
+                                                    service,
+                                                    Util.LOGFILE_BUILD))
                 if status is False:
                     Util.set_state(Util.BUILD, 0, "Failed")
                     self.util.logger.error("Build FAILED: %s", error_out)
@@ -404,7 +351,8 @@ class Builder:
             status, error_out, _ = self.util.os_command_in_host(
                 'cd {}/build && docker-compose -f docker-compose-build.yml ' \
                 'build {} >> {} 2>&1'.format(self.util.host_eii_dir,
-                    no_cache_str, Util.LOGFILE_BUILD))
+                                             no_cache_str,
+                                             Util.LOGFILE_BUILD))
             if status is False:
                 Util.set_state(Util.BUILD, 0, "Failed")
                 self.util.logger.error("Build FAILED: %s", error_out)
@@ -434,8 +382,9 @@ class Builder:
 
         Util.set_state(Util.BUILD, 0)
         self.util.logger.info("Building...")
-        self.threads[Util.BUILD][Util.THREAD] = Thread(target=self.builder_thread,
-                args=(services, sequential, no_cache))
+        self.threads[Util.BUILD][Util.THREAD] = Thread(
+            target=self.builder_thread,
+            args=(services, sequential, no_cache))
         self.threads[Util.BUILD][Util.ALIVE] = True
         self.threads[Util.BUILD][Util.THREAD].start()
         return True, "", ""
@@ -515,8 +464,9 @@ class Builder:
 
         Util.set_state(Util.DEPLOY, 0)
         self.util.logger.info("Deploying...")
-        self.threads[Util.DEPLOY][Util.THREAD] = Thread(target=self.deployer_thread,
-                args=(images, ip_address, username, password, path))
+        self.threads[Util.DEPLOY][Util.THREAD] = Thread(
+            target=self.deployer_thread,
+            args=(images, ip_address, username, password, path))
         self.threads[Util.DEPLOY][Util.ALIVE] = True
         self.threads[Util.DEPLOY][Util.THREAD].start()
         return True, ""
@@ -536,9 +486,7 @@ class Builder:
         """
         logs = {}
         for task in tasks:
-            if task == Util.PROVISION:
-                log_file = Util.EII_PROVISION_PATH + Util.LOGFILE_PROVISION
-            elif task == Util.BUILD:
+            if task == Util.BUILD:
                 log_file = Util.EII_BUILD_PATH + Util.LOGFILE_BUILD
             else:
                 error_detail = "Unknown task: {}".format(task)
@@ -658,7 +606,7 @@ class Builder:
             cmd = "cd {}/build && docker-compose down".format(self.util.host_eii_dir)
         elif action == Util.RESTART:
             cmd = "cd {}/build && docker-compose down && docker-compose up -d".format(
-                    self.util.host_eii_dir)
+                self.util.host_eii_dir)
 
         status, error_detail, _ = self.util.os_command_in_host(cmd)
         if not status:
