@@ -36,7 +36,7 @@ function setupHost() {
     fi
     which sshpass
     if ! [ "$?" -eq 0 ];then
-        sudo apt-get update && apt-get install sshpass
+        sudo apt-get update && sudo apt-get install sshpass
     fi
 }
 
