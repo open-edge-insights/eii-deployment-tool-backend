@@ -429,8 +429,8 @@ class Builder:
             return
 
         status, error_out, _ = self.util.os_command(
-            'sshpass -p "{}" rsync -e "ssh -o StrictHostKeyChecking=no" -z {} {}@{}:{}'
-            .format(password, Util.EII_BUILD_PATH, username, ip_address, path))
+            'sshpass -p "{}" rsync -r -e "ssh -o StrictHostKeyChecking=no" -z {} {}@{}:{}'
+            .format(password, Util.EII_BUILD_PATH[:-1], username, ip_address, path))
         if status is False:
             Util.set_state(Util.DEPLOY, 0, "Failed")
             self.util.logger.error("Deploy FAILED: Reason: %s", error_out)
