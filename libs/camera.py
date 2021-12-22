@@ -21,7 +21,9 @@
 """ Module for camera handling """
 
 import time
-from threading import Thread, Lock
+from secrets import token_urlsafe
+from queue import Queue
+from threading import Thread, Lock, Condition
 import cv2
 from .util import Util
 
@@ -35,6 +37,7 @@ class Camera:
         self.device_threads = {}
         self.mutex = Lock()
         self.util = Util()
+        self.BUFF_SIZE = 30
 
     def resize_image(self, image, width=None, height=None, method=cv2.INTER_AREA):
         """Function to resize an image
@@ -62,7 +65,7 @@ class Camera:
         else:
             aspect = width / float(img_width)
             new_size = (width, int(img_height * aspect))
-        new_image = cv2.resize(image, new_size, interpolation = method)
+        new_image = cv2.resize(image, new_size, interpolation=method)
         return new_image
 
 
@@ -94,8 +97,10 @@ class Camera:
         """
         cap = None
         try:
-            dev = int(device) if device.isnumeric() else device
-            cap = cv2.VideoCapture(dev)
+            self.util.logger.debug("Opening device: %s", device)
+            cap = cv2.VideoCapture(device)
+            if not cap:
+                self.util.logger.info("Warning: Failed to open device: %s", device)
             while self.is_alive(device) and cap and cap.isOpened():
                 _, frame = cap.read()
                 if frame is None:
@@ -113,10 +118,16 @@ class Camera:
                 bframe = b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' +  \
                             bytearray(encoded_image) + b'\r\n'
                 self.mutex.acquire()
-                self.device_threads[device][Util.FRAMES] = bframe
+                queue = self.device_threads[device][Util.FRAMES]
+                cond = self.device_threads[device][Util.CONDITION]
                 self.mutex.release()
+                with cond:
+                    if not queue.full():
+                        queue.put(bframe)
+                        cond.notifyAll()
             # Close video capture
             if cap and cap.isOpened():
+                self.util.logger.debug("Closing device: %s", device)
                 cap.release()
             # If thread was not signalled to terminate, then the camera capture
             # must have closed due to an error. Remove the thread and device info
@@ -133,7 +144,7 @@ class Camera:
             if self.mutex.locked():
                 self.mutex.release()
             self.util.logger.error("Error while streaming camera %s: %s",
-                device, exception)
+                                   device, exception)
 
 
     def read_frame(self, device):
@@ -148,14 +159,26 @@ class Camera:
         self.mutex.acquire()
         alive = device in self.device_threads
         self.mutex.release()
-        frame = None
+        frames = []
         while alive:
             self.mutex.acquire()
             # Check for parent (thread) termination signal
-            alive = self.device_threads[device][Util.ALIVE]
-            frame = self.device_threads[device][Util.FRAMES]
-            self.mutex.release()
-            yield frame
+            if device in self.device_threads:
+                alive = self.device_threads[device][Util.ALIVE]
+                queue = self.device_threads[device][Util.FRAMES]
+                cond = self.device_threads[device][Util.CONDITION]
+                self.mutex.release()
+                with cond:
+                    cond.wait()
+                    while not queue.empty():
+                        frames.append(queue.get())
+            else:
+                self.mutex.release()
+                alive = False
+            if frames:
+                for i in range(len(frames)):
+                    yield frames[i]
+                frames = []
 
     def start(self, devices, width, height):
         """Starts the specified cameras
@@ -173,11 +196,13 @@ class Camera:
         for device in devices:
             if device not in dts:
                 dts[device] = {}
+                dts[device][Util.ID] = str(token_urlsafe(8))
                 dts[device][Util.THREAD] = Thread(
-                        target=self.streamer_thread,
-                        args=(device, width, height))
+                    target=self.streamer_thread,
+                    args=(device, width, height))
                 dts[device][Util.ALIVE] = True
-                dts[device][Util.FRAMES] = None
+                dts[device][Util.FRAMES] = Queue(self.BUFF_SIZE)
+                dts[device][Util.CONDITION] = Condition()
                 dts[device][Util.THREAD].start()
             else:
                 self.util.logger.info("Warning: camera device %s already running", device)
@@ -192,7 +217,7 @@ class Camera:
         """
         self.mutex.acquire()
         # When no devices are provided, assume all devices
-        if len(devices) == 0:
+        if not devices:
             devices = list(self.device_threads)
         # Signal all the provided devices threads to exit
         for device in devices:
@@ -200,7 +225,7 @@ class Camera:
                 self.device_threads[device][Util.ALIVE] = False
             else:
                 self.util.logger.info("Warning: camera device %s not running",
-                        device)
+                                      device)
         # Make a safe copy of the list
         threads = self.device_threads.copy()
         self.mutex.release()
@@ -214,7 +239,7 @@ class Camera:
                 self.mutex.release()
 
 
-    def get_status(self, devices = None):
+    def get_status(self, devices=None):
         """ Gets the current status of all provided camera devices
 
         :param devices: list of camera device ids
@@ -224,15 +249,21 @@ class Camera:
         """
         camera_status = {}
         self.mutex.acquire()
-        if devices is None or len(devices) == 0:
+        if not devices:
             for device in self.device_threads:
-                camera_status[device] = "Running"
+                camera_status[device] = {
+                    "status": "Running",
+                    "stream_id": self.device_threads[device][Util.ID]
+                }
         else:
             for device in devices:
                 if device in self.device_threads:
-                    camera_status[device] = "Running"
+                    camera_status[device] = {
+                        "status": "Running",
+                        "stream_id": self.device_threads[device][Util.ID]
+                    }
                 else:
-                    camera_status[device] = "Not Running"
+                    camera_status[device] = {"status": "Not Running"}
         self.mutex.release()
         return camera_status
 
@@ -256,7 +287,7 @@ class Camera:
                 key = tokens[0]
                 data[key] = {}
                 data[key]["type"] = tokens[2][1:-1]
-                print(tokens)
+                self.util.logger.debug(tokens)
                 for token in tokens[4:]:
                     key_value = token.split("=")
                     data[key][key_value[0]] = key_value[1]
@@ -282,13 +313,13 @@ class Camera:
             params = configs[device]
             for param in params:
                 status, error_detail, result = self.util.os_command(
-                        "v4l2-ctl -d {} -c {}={}".format(
-                            device, param, params[param]))
+                    "v4l2-ctl -d {} -c {}={}".format(
+                        device, param, params[param]))
                 self.util.logger.debug("v4l2-ctl output: %s", result)
                 if status is False:
                     self.util.logger.error(
-                            "Failed to set camera %s config - %s=%s: %s",
-                            device, param, params[param], error_detail)
+                        "Failed to set camera %s config - %s=%s: %s",
+                        device, param, params[param], error_detail)
         return status, error_detail
 
 
@@ -317,7 +348,7 @@ class Camera:
                 continue
             try:
                 params = configs[device]
-                if len(params) == 0 or params[0] == "*":
+                if not params or params[0] == "*":
                     data[device] = result_json
                     continue
                 data[device] = {}
@@ -328,12 +359,12 @@ class Camera:
                 status = False
                 failed_devices.append(device)
                 self.util.logger.error(
-                        "Failed to validate params for device %s: %s",
-                        device, exception)
+                    "Failed to validate params for device %s: %s",
+                    device, exception)
                 break
 
 
-        if len(failed_devices) > 0:
+        if failed_devices:
             status = False
             error_detail = "get config failed for thse devices: {}".format(
                 failed_devices)

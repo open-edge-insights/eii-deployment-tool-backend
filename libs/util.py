@@ -47,30 +47,32 @@ class Util:
     state_mutex = Lock()
 
     # generic keys
-    TASK="task"
-    PROGRESS="progress"
-    STATUS="status"
-    IN_PROGRESS="In Progress"
-    SUCCESS="Success"
-    FAILED="Failed"
-    BUILD="build"
-    DEPLOY="deploy"
-    ALIVE="alive"
-    THREAD="thread"
-    FRAMES="frames"
-    START="start"
-    STOP="stop"
-    RESTART="restart"
-    BUSY="busy"
+    TASK = "task"
+    PROGRESS = "progress"
+    STATUS = "status"
+    IN_PROGRESS = "In Progress"
+    SUCCESS = "Success"
+    FAILED = "Failed"
+    BUILD = "build"
+    DEPLOY = "deploy"
+    ALIVE = "alive"
+    THREAD = "thread"
+    FRAMES = "frames"
+    START = "start"
+    STOP = "stop"
+    RESTART = "restart"
+    BUSY = "busy"
+    CONDITION = "cond"
+    ID = "id"
 
     state_info = {TASK: "", PROGRESS: "", STATUS: ""}
 
     def __init__(self):
         error = None
         # Initilize logging
-        env_log_level   = os.environ.get("LOG_LEVEL", "INFO")
-        self.host_user  = os.environ.get("HOST_USER", "")
-        self.host_eii_dir   = os.environ.get("HOST_EII_DIR", "")
+        env_log_level = os.environ.get("LOG_LEVEL", "INFO")
+        self.host_user = os.environ.get("HOST_USER", "")
+        self.host_eii_dir = os.environ.get("HOST_EII_DIR", "")
 
         logging_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         if env_log_level == "DEBUG":
@@ -82,7 +84,7 @@ class Util:
         else:
             logging_level = logging.INFO
             error = "Invalid log level {}. Resetting log level to INFO".format(
-                    env_log_level)
+                env_log_level)
 
         logging.basicConfig(level=logging_level, format=logging_format)
         self.logger = logging.getLogger("DeploymentToolBackend")
@@ -157,7 +159,7 @@ class Util:
         return status, error_detail
 
 
-    def get_consolidated_config(self, path = None):
+    def get_consolidated_config(self, path=None):
         """Get specified/current config data
 
         :param path: path for the config file
@@ -182,13 +184,13 @@ class Util:
         except Exception as exception:
             status = False
             error_detail = "exception while reading eii_config.json: {}".format(
-                    exception)
+                exception)
             self.logger.error(error_detail)
 
         return status, error_detail, eii_config
 
 
-    def store_consolidated_config(self, config, path = None):
+    def store_consolidated_config(self, config, path=None):
         """Write config data to the specified/current config file
 
         :param config: config data
@@ -229,8 +231,8 @@ class Util:
         error_detail = ""
         try:
             out = sp.check_output(
-                     shlex.split(cmd),
-                     shell=False)
+                shlex.split(cmd),
+                shell=False)
             status = True
         except Exception as exception:
             error_detail = "error while executing {}: {}".format(cmd, exception)
@@ -255,17 +257,17 @@ class Util:
         self.logger.debug(cmd)
         try:
             remote_cmd = 'ssh -o "StrictHostKeyChecking=no" -i {} {}@{} "{}"'.format(
-                                Util.SSH_KEY_PATH, self.host_user, self.HOST_IP, cmd)
+                Util.SSH_KEY_PATH, self.host_user, self.HOST_IP, cmd)
             if output:
                 out = sp.check_output(
-                         remote_cmd,
-                         shell=True)
+                    remote_cmd,
+                    shell=True)
                 out_str = out.decode(Util.ENCODING)
                 status = True
             else:
                 out = sp.call(
-                         remote_cmd,
-                         shell=True, stdin=sp.DEVNULL, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
+                    remote_cmd,
+                    shell=True, stdin=sp.DEVNULL, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
                 out_str = str(out)
                 status = True if out == 0 else False
         except Exception as exception:
@@ -336,7 +338,7 @@ class Util:
         return True
 
 
-    def make_response_json(self,status, data, error_detail):
+    def make_response_json(self, status, data, error_detail):
         """Common function for creating the response object for all the APIs
 
         :param status: status of repsonse
@@ -357,11 +359,11 @@ class Util:
                 data = json.dumps(data)
 
         response_json = {
-                            "data": data,
-                            "status_info": {
-                                "status": status,
-                                "error_detail": error_detail
-                            }
-                        }
+            "data": data,
+            "status_info": {
+                "status": status,
+                "error_detail": error_detail
+            }
+        }
 
         return response_json

@@ -115,7 +115,7 @@ class ProjectInfo(BaseModel): # pylint: disable=too-few-public-methods
     """Class that defines Project information param
 
     """
-    name: str = Field(..., title="Project name", min_length=1,max_length=128)
+    name: str = Field(..., title="Project name", min_length=1, max_length=128)
     class Config: # pylint: disable=too-few-public-methods
         """example data
         """
@@ -156,7 +156,7 @@ class CameraInfo(BaseModel): # pylint: disable=too-few-public-methods
         """
         schema_extra = {
             "example": {
-                "devices": ["0"],
+                "devices": ["/dev/video0"],
                 "width": 320,
                 "height": 240
             }
@@ -174,8 +174,8 @@ class CameraConfigsGet(BaseModel): # pylint: disable=too-few-public-methods
         schema_extra = {
             "example": {
                 "configs": {
-                    "0": ["*"],
-                    "1": [
+                    "/dev/video0": ["*"],
+                    "/dev/video1": [
                         "brightness",
                         "contrast"
                     ]
@@ -195,10 +195,10 @@ class CameraConfigsSet(BaseModel): # pylint: disable=too-few-public-methods
         schema_extra = {
             "example": {
                 "configs": {
-                    "0": {
+                    "/dev/video0": {
                         "gamma": "100"
                     },
-                    "1": {
+                    "/dev/video1": {
                         "brightness": "5",
                         "contrast": "6"
                     }
@@ -227,7 +227,7 @@ class ComponentInfo(BaseModel): # pylint: disable=too-few-public-methods
 
     """
     names: List[str] = Field(..., title="Component names. If none specified previous " \
-            "list would be used", 
+            "list would be used",
             min_length=1, max_length=64, min_items=0, max_items=32)
     instance_count: int = Field(..., title="Number of instances", gt=0, lt=16)
     dev_mode: Optional[bool] = Field(True, title="true for dev mode, false for prod mode")
@@ -567,11 +567,13 @@ def set_config(config: Dict,
 @app.post('/eii/ui/camera/config/get',
     response_model=Response200,
     responses={200: {"model": Response200}},
-    description="Get configurations of the specified camera devices"
+    description="Get configurations of the specified camera devices. "
+        "Please note that only USB cameras are supported as of now."
 )
 def camera_config_get(camera_configs: CameraConfigsGet,
         token: str=Depends(Authentication.validate_session)):
-    """"Get configuration info of the specified camera devices
+    """"Get configuration info of the specified camera devices.
+        Please note that only USB cameras are supported as of now.
 
     :param camera_configs: camera configurations
     :type token: CameraConfigsGet
@@ -589,11 +591,13 @@ def camera_config_get(camera_configs: CameraConfigsGet,
 @app.post('/eii/ui/camera/config/set',
     response_model=Response200,
     responses={200: {"model": Response200}},
-    description="Set configurations for the specified camera devices"
+    description="Set configurations for the specified camera devices. "
+        "Please note that only USB cameras are supported as of now."
 )
 def camera_config_set(camera_configs: CameraConfigsSet,
         token: str=Depends(Authentication.validate_session)):
-    """"Set configuration for the specified camera devices
+    """"Set configuration for the specified camera devices.
+        Please note that only USB cameras are supported as of now
 
     :param camera_configs: camera configurations
     :type token: CameraConfigsGet
@@ -611,12 +615,14 @@ def camera_config_set(camera_configs: CameraConfigsSet,
 @app.post('/eii/ui/camera/{action}',
     response_model=Response200,
     responses={200: {"model": Response200}},
-    description="Starts, stops and return status of the specified camera devices"
+    description="Starts, stops and return status of the specified camera devices. "
+        "Please note that only USB cameras are supported as of now."
 )
 def camera_operate(action: str,
         camera_info: CameraInfo,
         token: str=Depends(Authentication.validate_session)):
-    """Starts, stops and return status of the specified camera devices"
+    """Starts, stops and return status of the specified camera devices.
+       Please note that only USB cameras are supported as of now
 
     :param camera_info: camera info
     :type token: CameraInfo
@@ -629,9 +635,8 @@ def camera_operate(action: str,
     supported_actions = ["start", "stop", "status"]
 
     if action not in supported_actions:
-        return util.make_response_json(False, "", \
-                "Camera API FAILED. invalid arguments. expected any of {}" \
-                .format(supported_actions))
+        return util.make_response_json(False, "",
+            f"Camera API FAILED. invalid arguments. expected any of {supported_actions}")
 
     response = {}
     if action == "start":
@@ -641,7 +646,7 @@ def camera_operate(action: str,
             response = util.make_response_json(False, "", "No camera devices specified")
         else:
             response = util.make_response_json(
-                    True, camera.get_status(),"")
+                    True, camera.get_status(camera_info.devices),"")
     elif action == "stop":
         camera.stop(camera_info.devices)
         response = util.make_response_json(True,
@@ -652,16 +657,17 @@ def camera_operate(action: str,
     return response
 
 
-@app.get('/eii/ui/camera/stream/{device}',
+@app.get('/eii/ui/camera/stream/{stream_id}',
     response_class=StreamingResponse,
-    description="Stream from the specified camera device"
+    description="Stream from the specified camera device. "
+        "Please note that only USB cameras are supported as of now."
 )
-async def camera_stream(device: str,
+async def camera_stream(stream_id: str,
         token: str=Depends(Authentication.validate_session)):
     """description="Stream from the specified camera device"
 
-    :param device: camera device name
-    :type token: str
+    :param stream_id: Stream id returned by /eii/ui/camera/start API
+    :type stream_id: str
     :param token: session token returned internally
     :type token: str
     :return response: API response
@@ -674,7 +680,12 @@ async def camera_stream(device: str,
     camera.mutex.acquire()
     threads = camera.device_threads.copy()
     camera.mutex.release()
-    if device in threads:
+    device = None
+    for dev in threads:
+        if threads[dev][Util.ID] == stream_id:
+            device = dev
+            break
+    if device:
         response = StreamingResponse(camera.read_frame(device),
             media_type="multipart/x-mixed-replace;boundary=frame")
     else:
@@ -810,9 +821,8 @@ def containers_operate(action: str,
     supported_actions = ["start", "stop", "restart"]
 
     if action not in supported_actions:
-        return util.make_response_json(False, "", \
-                "Container API FAILED. invalid arguments. expected any of {}" \
-                .format(supported_actions))
+        return util.make_response_json(False, "",
+            f"Container API FAILED. invalid arguments. expected any of {supported_actions}")
 
     response = {}
     status, error_detail = builder.do_run(action)
