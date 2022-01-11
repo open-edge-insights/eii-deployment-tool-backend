@@ -42,7 +42,7 @@ class Util:
     LOGFILE_BUILD = ".build.log"
     JSON_EXT = ".json"
     HOST_IP = "172.17.0.1"
-    SSH_KEY_PATH = "/app/id_rsa"
+    SSH_KEY_PATH = "/var/run/secrets/id_rsa"
     ENCODING = "utf-8"
     state_mutex = Lock()
 

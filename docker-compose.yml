@@ -41,8 +41,6 @@ services:
         EII_VERSION: ${EII_VERSION}
         CMAKE_INSTALL_PREFIX: ${EII_INSTALL_PATH}
         UBUNTU_IMAGE_VERSION: ${UBUNTU_IMAGE_VERSION}
-        # Specify users credentials
-        CREDS: '[["admin","admin@123"]]'    
     read_only: true
     image: deployment_tool_backend:${EII_VERSION}
     container_name: deployment_tool_backend
@@ -84,6 +82,8 @@ services:
     secrets:
       - cert
       - key
+      - creds
+      - id_rsa
 networks:
   eii:
     external:
@@ -93,3 +93,7 @@ secrets:
     file: certificates/server_cert.pem
   key:
     file: certificates/server_key.pem
+  id_rsa:
+    file: id_rsa
+  creds:
+    file: creds.json

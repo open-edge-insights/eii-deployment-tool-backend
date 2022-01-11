@@ -26,6 +26,15 @@
     * INFO
     * ERROR
 
+  * Users must provide the desired user credentials in the file ./creds.json.
+    The same credentials should be provided in the frontend, to login to the tool.
+    Please note that users won't be able to login to the backend without providing credentials in the above mentioned file, in proper json format as shown below:
+    
+    ```
+    {
+        "username" : "password"
+    }
+    ```
 
 ## Running the tool
 

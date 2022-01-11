@@ -89,7 +89,8 @@ usecases
 
 ## Deploy
 
-* **deploy**
+* **Deploy Local**
+* **Deploy Remote**
 
 """
 app = FastAPI(
@@ -106,7 +107,7 @@ util = Util()
 project = Project()
 camera  = Camera()
 builder = Builder()
-
+CREDS = {}
 #
 # Parmeter class definitions
 #
@@ -389,7 +390,7 @@ def login(creds: Credentials):
     :rtype Response200
     """
     user_cred = auth.get_user_credentials(creds.username, CREDS)
-    if user_cred is None or user_cred[1] != creds.password:
+    if user_cred is None or user_cred != creds.password:
         raise HTTPException(
             status_code=HTTP_403_FORBIDDEN,
             detail="Invalid user or password")
@@ -615,8 +616,14 @@ def camera_config_set(camera_configs: CameraConfigsSet,
 @app.post('/eii/ui/camera/{action}',
     response_model=Response200,
     responses={200: {"model": Response200}},
-    description="Starts, stops and return status of the specified camera devices. "
-        "Please note that only USB cameras are supported as of now."
+    description="Starts, stops and return status of the specified camera devices.<br><br>"
+        "Supported actions are:<br><br>"
+        "<b><i>start</i></b>: starts the specified camera devices<br>" 
+        "<b><i>stop</i></b>: stops the specified camera devices. If none are specified, all the running "
+        "cameras are stopped<br>" 
+        "<b><i>status</i></b>: Returns the status of specified camera devices<br><br>" 
+        "Notes:<br>"
+        "- Only USB cameras are supported as of now.<br>"
 )
 def camera_operate(action: str,
         camera_info: CameraInfo,
@@ -659,8 +666,11 @@ def camera_operate(action: str,
 
 @app.get('/eii/ui/camera/stream/{stream_id}',
     response_class=StreamingResponse,
-    description="Stream from the specified camera device. "
-        "Please note that only USB cameras are supported as of now."
+    description="Stream from the specified camera device.<br><br>"
+        "<b><i>stream_id</i></b> is the param returned by /eii/ui/camera/start API<br><br>"
+        "Notes:<br>"
+        "- Only USB cameras are supported as of now.<br>"
+        "- This API can't be tested in this tool.<br>"
 )
 async def camera_stream(stream_id: str,
         token: str=Depends(Authentication.validate_session)):
@@ -858,12 +868,21 @@ def deploy(deploy_info: DeployInfo,
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3 or int(sys.argv[1]) <= 0:
+    if len(sys.argv) != 2 or int(sys.argv[1]) <= 0:
         util.logger.error("Error: Invalid/missing arguments!")
         sys.exit(0)
 
     server_port = int(sys.argv[1])
-    CREDS = json.loads(sys.argv[2])
+    load_status, load_error_detail, creds_str = util.load_file("/var/run/secrets/creds")
+    if load_status is False:
+        util.logger.error("Error: failed to read credentials: %s", load_error_detail)
+        sys.exit(0)
+
+    try:
+        CREDS = json.loads(creds_str)
+    except ValueError as e:
+        util.logger.error("Error: failed to parse credentials")
+        sys.exit(0)
 
     util.logger.info("Starting REST server...")
     app.add_middleware(

@@ -57,9 +57,8 @@ class Authentication():
         :return: user login credentails
         "rtype: ()
         """
-        for tup in creds:
-            if username in tup[0]:
-                return tup
+        if username in creds:
+            return creds[username]
         return None
 
     @staticmethod
