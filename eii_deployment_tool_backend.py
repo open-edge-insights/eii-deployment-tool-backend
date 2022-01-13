@@ -618,8 +618,8 @@ def camera_config_set(camera_configs: CameraConfigsSet,
     responses={200: {"model": Response200}},
     description="Starts, stops and return status of the specified camera devices.<br><br>"
         "Supported actions are:<br><br>"
-        "<b><i>start</i></b>: starts the specified camera devices<br>" 
-        "<b><i>stop</i></b>: stops the specified camera devices. If none are specified, all the running "
+        "<b><i>start</i></b>: Starts the specified camera devices<br>" 
+        "<b><i>stop</i></b>: Stops the specified camera devices. If none are specified, all the running "
         "cameras are stopped<br>" 
         "<b><i>status</i></b>: Returns the status of specified camera devices<br><br>" 
         "Notes:<br>"
@@ -816,7 +816,11 @@ def generate_udf_config(udf_info: UdfInfo,
 @app.post('/eii/ui/containers/{action}',
     response_model=Response200,
     responses={200: {"model": Response200}},
-    description="Starts, stops and restarts the all the containers in the usecase"
+    description="Starts, stops and restarts the all the containers in the usecase<br><br>"
+        "Supported actions are:<br><br>"
+        "<b><i>start</i></b>: Starts all the containers specified in generated docker-compose.yml<br>" 
+        "<b><i>stop</i></b>: Stops all the containers specified in generated docker-compose.yml<br>"
+        "<b><i>restart</i></b>: Restarts all the containers specified in generated docker-compose.yml<br>"
 )
 def containers_operate(action: str,
         token: str=Depends(Authentication.validate_session)):

@@ -601,11 +601,13 @@ class Builder:
             return False, Util.BUSY
 
         if action == Util.START:
-            cmd = "cd {}/build && docker-compose up -d".format(self.util.host_eii_dir)
+            cmd = "cd {}/build && docker-compose up -d ia_configmgr_agent && sleep 25 && " \
+                "docker-compose up -d".format(self.util.host_eii_dir)
         elif action == Util.STOP:
             cmd = "cd {}/build && docker-compose down".format(self.util.host_eii_dir)
         elif action == Util.RESTART:
-            cmd = "cd {}/build && docker-compose down && docker-compose up -d".format(
+            cmd = "cd {}/build && docker-compose down && docker-compose up -d " \
+                "ia_configmgr_agent && sleep 25 && docker-compose up -d".format(
                 self.util.host_eii_dir)
 
         status, error_detail, _ = self.util.os_command_in_host(cmd)
