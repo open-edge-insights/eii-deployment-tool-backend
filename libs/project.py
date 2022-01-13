@@ -48,16 +48,20 @@ class Project():
         if status is False:
             util.logger.error("Failed to load project %s: %s", name, error_detail)
         else:
-            status, error_detail = util.store_consolidated_config(config)
+            store_config = config.copy()
+            store_config.pop(util.DT_CONFIG_KEY, None)
+            status, error_detail = util.store_consolidated_config(store_config)
 
         return status, error_detail, config
 
 
-    def do_store_project(self, name, replace = True):
+    def do_store_project(self, name, show_wv, replace = True):
         """Create config file for the current unsaved project
 
         :param name: name for the project
         :type name: str
+        :param show_wv: Whether to include Web Visualizer in usecase
+        :type show_wv: bool
         :param replace: Whether replace existing file
         :type replace: bool
         :return: status of operation
@@ -74,6 +78,7 @@ class Project():
                 util.logger.error("Error: destination file %s already exists!", path)
                 status = False
             else:
+                config[util.DT_CONFIG_KEY] = {util.SHOW_WV: show_wv}
                 status, error_detail = util.store_consolidated_config(config, path)
         return status, error_detail
 

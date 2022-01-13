@@ -45,6 +45,8 @@ class Util:
     SSH_KEY_PATH = "/var/run/secrets/id_rsa"
     ENCODING = "utf-8"
     state_mutex = Lock()
+    DT_CONFIG_KEY = "__dt_config__"
+    SHOW_WV = "show_wv"
 
     # generic keys
     TASK = "task"

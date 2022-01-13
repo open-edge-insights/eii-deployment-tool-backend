@@ -112,7 +112,7 @@ CREDS = {}
 # Parmeter class definitions
 #
 
-class ProjectInfo(BaseModel): # pylint: disable=too-few-public-methods
+class ProjectLoadInfo(BaseModel): # pylint: disable=too-few-public-methods
     """Class that defines Project information param
 
     """
@@ -122,7 +122,24 @@ class ProjectInfo(BaseModel): # pylint: disable=too-few-public-methods
         """
         schema_extra = {
             "example": {
-                "name": "my_new_usecase"
+                "name": "my_new_usecase",
+            }
+        }
+
+
+class ProjectStoreInfo(BaseModel): # pylint: disable=too-few-public-methods
+    """Class that defines Project information param
+
+    """
+    name: str = Field(..., title="Project name", min_length=1, max_length=128)
+    include_wv: bool = Field(True, title="Include WebVisualizer in the usecase")
+    class Config: # pylint: disable=too-few-public-methods
+        """example data
+        """
+        schema_extra = {
+            "example": {
+                "name": "my_new_usecase",
+                "include_wv": True
             }
         }
 
@@ -440,12 +457,12 @@ def logout(token: str = Depends(Authentication.validate_session)):
     responses={200: {"model": Response200}},
     description="Returns specified project config data"
 )
-def project_load(proj: ProjectInfo, token: str=Depends(
+def project_load(proj: ProjectLoadInfo, token: str=Depends(
         Authentication.validate_session)):
     """Returns specified project config data
 
     :param proj: project info
-    :type token: ProjectInfo
+    :type token: ProjectLoadInfo
     :param token: session token returned internally
     :type token: str
     :return response: API response
@@ -461,19 +478,19 @@ def project_load(proj: ProjectInfo, token: str=Depends(
     responses={200: {"model": Response200}},
     description="Saves current project config data to specified file"
 )
-def project_store(proj: ProjectInfo, token: str=Depends(
+def project_store(proj: ProjectStoreInfo, token: str=Depends(
         Authentication.validate_session)):
     """Stores the specified project config data
 
     :param proj: project info
-    :type token: ProjectInfo
+    :type token: ProjectStoreInfo
     :param token: session token returned internally
     :type token: str
     :return response: API response
     :rtype Response200
     """
     _ = token
-    status, error_detail = project.do_store_project(proj.name)
+    status, error_detail = project.do_store_project(proj.name, proj.include_wv)
     return util.make_response_json(status, " ", error_detail)
 
 
