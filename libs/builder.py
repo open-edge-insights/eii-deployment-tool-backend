@@ -133,8 +133,7 @@ class Builder:
             status, error_detail, old_config = self.util.get_consolidated_config()
         v_str = "-v{}".format(instances) if instances > 1 else ""
         status, error_detail, _ = self.util.os_command_in_host(
-            'cd {}/build && source ./source.sh && ' \
-            'sudo -E python3 builder.py -f {} {}' \
+            'cd {}/build && sudo -E python3 builder.py -f {} {}'
             .format(self.util.host_eii_dir, self.util.TEMP_USECASE_FILE_NAME, v_str))
         if not status:
             error_detail = "error: failed to generate eii_config"

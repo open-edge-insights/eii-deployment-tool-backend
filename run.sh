@@ -38,6 +38,15 @@ function setupHost() {
     if ! [ "$?" -eq 0 ];then
         sudo apt-get update && sudo apt-get install sshpass
     fi
+    wd=$(pwd)
+    cd ../build
+    ./source.sh
+    cd "$wd"
+    conts=$(docker ps -qaf name=ia_*)
+    if ! [ -z "$conts" ];then
+        echo "Stopping all running EII containers..."
+        docker stop $conts
+    fi
 }
 
 
