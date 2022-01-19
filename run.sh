@@ -79,6 +79,7 @@ function check_certs() {
         sudo chmod auo+x ./gen_certs.sh
         sudo ./gen_certs.sh
         sudo chown -R $USER:$USER ./certificates
+        sudo chmod -R u+r ./certificates
     fi
 }
 
