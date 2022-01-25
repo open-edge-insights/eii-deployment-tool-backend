@@ -21,6 +21,7 @@
 """ Module for project handling """
 
 import os
+import json
 from .util import Util
 
 class Project():
@@ -55,15 +56,39 @@ class Project():
         return status, error_detail, config
 
 
-    def do_store_project(self, name, show_wv, replace = True):
+    def do_create_project(self, name, replace):
+        """Create config file for the current unsaved project
+
+        :param name: name for the project
+        :type name: str
+        :param replace: Whether replace existing file
+        :type replace: bool
+        :return: status of operation
+        :rtype: bool
+        :return: error description
+        :rtype: str
+        """
+        _ = self
+        util = Util()
+        path = util.EII_PROJECTS_PATH + name + util.JSON_EXT
+        if replace is False and os.path.isfile(path):
+            util.logger.debug("Warning: destination file %s already exists!", path)
+            error_detail = "AlreadyExist"
+            status = False
+        else:
+            config = {}
+            config[util.DT_CONFIG_KEY] = {util.SHOW_WV: False}
+            status, error_detail = util.store_file(path, json.dumps(config))
+        return status, error_detail
+
+
+    def do_store_project(self, name, show_wv):
         """Create config file for the current unsaved project
 
         :param name: name for the project
         :type name: str
         :param show_wv: Whether to include Web Visualizer in usecase
         :type show_wv: bool
-        :param replace: Whether replace existing file
-        :type replace: bool
         :return: status of operation
         :rtype: bool
         :return: error description
@@ -74,12 +99,8 @@ class Project():
         status, error_detail, config = util.get_consolidated_config()
         if status:
             path = util.EII_PROJECTS_PATH + name + util.JSON_EXT
-            if replace is False and os.path.isfile(path):
-                util.logger.error("Error: destination file %s already exists!", path)
-                status = False
-            else:
-                config[util.DT_CONFIG_KEY] = {util.SHOW_WV: show_wv}
-                status, error_detail = util.store_consolidated_config(config, path)
+            config[util.DT_CONFIG_KEY] = {util.SHOW_WV: show_wv}
+            status, error_detail = util.store_consolidated_config(config, path)
         return status, error_detail
 
 

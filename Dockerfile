@@ -22,6 +22,7 @@
 
 ARG EII_VERSION
 ARG UBUNTU_IMAGE_VERSION
+FROM ia_common:$EII_VERSION as common
 FROM ia_eiibase:$EII_VERSION as builder
 LABEL description="EII Web UI Deployment Tool Backend Image"
 WORKDIR /app
@@ -47,6 +48,7 @@ ARG CMAKE_INSTALL_PREFIX
 ENV PYTHONPATH=$PYTHONPATH:/app/.local/lib/python3.8/site-packages:/app \
     LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${CMAKE_INSTALL_PREFIX}/lib \
     PATH=$PATH:/app/.local/bin
+COPY --from=common /eii/common/util eiiutil
 COPY --from=builder /root/.local/lib .local/lib
 COPY --from=builder /app .
 COPY ./eii_deployment_tool_backend.py /app/

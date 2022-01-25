@@ -44,8 +44,9 @@ function setupHost() {
     cd "$wd"
     conts=$(docker ps -qaf name=ia_*)
     if ! [ -z "$conts" ];then
-        echo "Stopping all running EII containers..."
+        echo "Stopping and removing all EII containers..."
         docker stop $conts
+        docker rm $conts
     fi
 }
 

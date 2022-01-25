@@ -26,6 +26,8 @@ import base64
 from threading import Thread
 import yaml
 from .util import Util
+from eiiutil.util import Util as EiiUtil
+from string import digits
 
 class Builder:
     """This class will have functions related to build and deploy
@@ -56,10 +58,9 @@ class Builder:
             with open(path, "w", encoding="utf8") as fyml:
                 fyml.write("AppContexts:\n")
                 for component in components:
-                    fyml.write("- {}\n".format(component))
+                    fyml.write(f"- {component}\n")
         except Exception as exception:
-            error_detail = "exception while creating usecase yml file: {}".format(
-                exception)
+            error_detail = f"exception while creating usecase yml file: {exception}"
             self.util.logger.error(error_detail)
             status = False
         return status, error_detail
@@ -122,8 +123,7 @@ class Builder:
         env_path = self.util.EII_BUILD_PATH + '/.env'
         status, error_out = self.update_env_file(env_path, key, value)
         if status is False:
-            error_detail = "error: FAILE to set DEV_MODE in .env!: {}".format(
-                error_out)
+            error_detail = f"error: FAILE to set DEV_MODE in .env!: {error_out}"
             self.util.logger.error(error_detail)
             return status, error_detail, None
 
@@ -131,7 +131,7 @@ class Builder:
         if reset is False:
             # Save old config
             status, error_detail, old_config = self.util.get_consolidated_config()
-        v_str = "-v{}".format(instances) if instances > 1 else ""
+        v_str = f"-v{instances}" if instances > 1 else ""
         status, error_detail, _ = self.util.os_command_in_host(
             'cd {}/build && sudo -E python3 builder.py -f {} {}'
             .format(self.util.host_eii_dir, self.util.TEMP_USECASE_FILE_NAME, v_str))
@@ -186,8 +186,7 @@ class Builder:
                     else:
                         config[key].update({subkey: cconfig[config_key]})
                 except Exception as exception:
-                    error_detail = "Parse error. Invalid EII config file!: {}".format(
-                        exception)
+                    error_detail = f"Parse error. Invalid EII config file!: {exception}"
                     self.util.logger.error(error_detail)
                     status = False
                     config = {}
@@ -217,12 +216,25 @@ class Builder:
             if status:
                 eii_config = json.loads(eii_config_str)
                 for service in config:
-                    eii_config["/{}/config".format(service)] = config[service]["config"]
-                    eii_config["/{}/interfaces".format(service)] = \
-                        config[service]["interfaces"]
+                    service_dir = service.rstrip(digits)
+                    _, _, schema = self.util.load_file(
+                        self.util.EII_DIR + service_dir + "/schema.json")
+                    # A bug in platform causes VA validation to always fail
+                    # This hack avoids validation for VA.
+                    # TODO: remove this hack when issue is fixed in platform
+                    if service_dir != "VideoAnalytics" and \
+                        schema and not EiiUtil.validate_json(
+                        schema, json.dumps(config[service]["config"])):
+                        status = False
+                        error_detail = f"Schema validation failed for {service}"
+                        self.util.logger.error(error_detail)
+                        break
+                    eii_config[f"/{service}/config"] = config[service]["config"]
+                    eii_config[f"/{service}/interfaces"] = config[service]["interfaces"]
+                if status:
                     status, error_detail = self.util.store_consolidated_config(eii_config)
         except Exception as exception:
-            error_detail = "Exception while updating EII config: {}".format(exception)
+            error_detail = f"Exception while updating EII config: {exception}"
             self.util.logger.error(error_detail)
             status = False
         return status, error_detail
@@ -252,14 +264,13 @@ class Builder:
                     if status or key_value is None or key_value[0] != key:
                         out = out + line
                         continue
-                    out = out + "{}={}\n".format(key, value)
+                    out = out + f"{key}={value}\n"
                     status = True
             with open(path, "w", encoding=Util.ENCODING) as writer:
                 writer.writelines(out)
         except Exception as exception:
             status = False
-            error_detail = "error: FAILED to update env file: {}".format(
-                exception)
+            error_detail = f"error: FAILED to update env file: {exception}"
         return status, error_detail
 
 
@@ -287,7 +298,7 @@ class Builder:
                     services.append(name)
             status = True
         except Exception as exception:
-            error_detail = "failed to get services from {}: {}".format(yml, exception)
+            error_detail = f"failed to get services from {yml}: {exception}"
             self.util.logger.error(error_detail)
         return status, error_detail, services
 
@@ -488,7 +499,7 @@ class Builder:
             if task == Util.BUILD:
                 log_file = Util.EII_BUILD_PATH + Util.LOGFILE_BUILD
             else:
-                error_detail = "Unknown task: {}".format(task)
+                error_detail = f"Unknown task: {task}"
                 self.util.logger.error(error_detail)
                 return False, error_detail, {}
 
@@ -522,7 +533,7 @@ class Builder:
         if path.startswith("/"):
             path = path[1:]
         if not path.startswith(UDF_BASE_PATH):
-            error_detail = "Invalid UDF path: {}".format(path)
+            error_detail = f"Invalid UDF path: {path}"
             self.util.logger.error(error_detail)
             return False, error_detail, {}
 
@@ -532,7 +543,7 @@ class Builder:
             tokens = udf_path.split("/")
             # Validate UDF path
             if tokens is None or len(tokens) < 2 or tokens[1].strip() == "":
-                error_detail = "Invalid UDF path: {}".format(path)
+                error_detail = f"Invalid UDF path: {path}"
                 return False, error_detail, {}
             config["type"] = tokens[0]
             # Extract/generate UDF name from path
@@ -574,7 +585,7 @@ class Builder:
                         if endpos >= 0:
                             break
         except Exception as exception:
-            error_detail = "Failed to parse udf: {}. {}".format(path, exception)
+            error_detail = f"Failed to parse udf: {path}. {exception}"
             self.util.logger.error(error_detail)
             return False, error_detail, {}
         return True, "", config
@@ -592,7 +603,7 @@ class Builder:
         """
         allowed_actions = [Util.START, Util.STOP, Util.RESTART]
         if action not in allowed_actions:
-            error_detail = "error: Invalid action: {}".format(action)
+            error_detail = f"error: Invalid action: {action}"
             self.util.logger.error(error_detail)
             return False, error_detail
 
@@ -611,7 +622,7 @@ class Builder:
 
         status, error_detail, _ = self.util.os_command_in_host(cmd)
         if not status:
-            error_detail = "error: failed to perform {}".format(action)
+            error_detail = f"error: failed to perform {action}"
             self.util.logger.error(error_detail)
             return False, error_detail
         return status, ""

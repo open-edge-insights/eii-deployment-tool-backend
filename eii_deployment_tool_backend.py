@@ -128,18 +128,35 @@ class ProjectLoadInfo(BaseModel): # pylint: disable=too-few-public-methods
 
 
 class ProjectStoreInfo(BaseModel): # pylint: disable=too-few-public-methods
-    """Class that defines Project information param
+    """Class that defines Project store information param
 
     """
     name: str = Field(..., title="Project name", min_length=1, max_length=128)
-    include_wv: bool = Field(True, title="Include WebVisualizer in the usecase")
+    include_wv: bool = Field(False, title="Include WebVisualizer in the usecase")
     class Config: # pylint: disable=too-few-public-methods
         """example data
         """
         schema_extra = {
             "example": {
                 "name": "my_new_usecase",
-                "include_wv": True
+                "include_wv": False
+            }
+        }
+
+
+class ProjectCreateInfo(BaseModel): # pylint: disable=too-few-public-methods
+    """Class that defines Project create information param
+
+    """
+    name: str = Field(..., title="Project name", min_length=1, max_length=128)
+    replace: bool = Field(False, title="Replace the project if already exists")
+    class Config: # pylint: disable=too-few-public-methods
+        """example data
+        """
+        schema_extra = {
+            "example": {
+                "name": "my_new_usecase",
+                "replace": False
             }
         }
 
@@ -473,6 +490,26 @@ def project_load(proj: ProjectLoadInfo, token: str=Depends(
     return util.make_response_json(status, config, error_detail)
 
 
+@app.post('/eii/ui/project/create',
+    response_model=Response200,
+    responses={200: {"model": Response200}},
+    description="Create a new project file"
+)
+def project_create(proj: ProjectCreateInfo, token: str=Depends(
+        Authentication.validate_session)):
+    """Create a new project file
+
+    :param proj: project info
+    :type token: ProjectCreateInfo
+    :param token: session token returned internally
+    :type token: str
+    :return response: API response
+    :rtype Response200
+    """
+    _ = token
+    status, error_detail = project.do_create_project(proj.name, proj.replace)
+    return util.make_response_json(status, " ", error_detail)
+
 @app.post('/eii/ui/project/store',
     response_model=Response200,
     responses={200: {"model": Response200}},
@@ -492,7 +529,6 @@ def project_store(proj: ProjectStoreInfo, token: str=Depends(
     _ = token
     status, error_detail = project.do_store_project(proj.name, proj.include_wv)
     return util.make_response_json(status, " ", error_detail)
-
 
 @app.get('/eii/ui/project/list',
     response_model=Response200,
