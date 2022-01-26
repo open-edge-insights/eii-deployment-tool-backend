@@ -24,10 +24,10 @@ import os
 import json
 import base64
 from threading import Thread
-import yaml
-from .util import Util
-from eiiutil.util import Util as EiiUtil
 from string import digits
+import yaml
+from eiiutil.util import Util as EiiUtil
+from .util import Util
 
 class Builder:
     """This class will have functions related to build and deploy
@@ -591,11 +591,27 @@ class Builder:
         return True, "", config
 
 
+    def get_eii_containers_list(self):
+        """Get list of all eii containers in the system
+
+        :return: whitespce seperated list of container id's
+        :rtype: str
+        """
+        _ = self
+        status, _, conts = self.util.os_command_in_host(
+            "docker ps -qaf name=ia_*", True)
+        cont_list = ""
+        if status and conts:
+            for cont in conts.splitlines():
+                cont_list = cont_list + " " + cont
+        return cont_list
+
+
     def do_run(self, action):
         """Start/stop/restart containers in the usecase
 
         :param action: Action to be performed: start/stop/restart
-        "type action: str
+        :type action: str
         :return: status of operation
         :rtype: bool
         :return: error description
@@ -610,15 +626,21 @@ class Builder:
         if Util.is_busy():
             return False, Util.BUSY
 
+        conts = self.get_eii_containers_list()
+        stop = f"docker stop {conts} && docker rm {conts};" if conts else ""
+        up = "docker-compose up -d"
+        path = self.util.host_eii_dir + "build"
+
         if action == Util.START:
-            cmd = "cd {}/build && docker-compose up -d ia_configmgr_agent && sleep 25 && " \
-                "docker-compose up -d".format(self.util.host_eii_dir)
+            cmd = f"cd {path} && {up} ia_configmgr_agent && sleep 30 && {up}"
         elif action == Util.STOP:
-            cmd = "cd {}/build && docker-compose down".format(self.util.host_eii_dir)
+            cmd = f"{stop}"
         elif action == Util.RESTART:
-            cmd = "cd {}/build && docker-compose down && docker-compose up -d " \
-                "ia_configmgr_agent && sleep 25 && docker-compose up -d".format(
-                self.util.host_eii_dir)
+            cmd = f"{stop} cd {path} && {up} ia_configmgr_agent && sleep 30 && {up}"
+
+        if cmd == "":
+            self.util.logger.debug("No remote command to execute")
+            return True, ""
 
         status, error_detail, _ = self.util.os_command_in_host(cmd)
         if not status:
