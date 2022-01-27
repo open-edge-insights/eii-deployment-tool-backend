@@ -290,18 +290,22 @@ class Util:
         :return: list of files and directories
         :rtype: dict[(str,list[str])
         """
-        status = True
+        status = False
         error_detail = ""
         file_list = {"files": [], "dirs": []}
         try:
-            for (_, dirnames, filenames) in os.walk(dir_path):
-                file_list["files"].extend(filenames)
-                file_list["dirs"].extend(dirnames)
-                break
+            if os.path.isdir(dir_path):
+                for (_, dirnames, filenames) in os.walk(dir_path):
+                    file_list["files"].extend(filenames)
+                    file_list["dirs"].extend(dirnames)
+                    break
+                status = True
+            else:
+                error_detail = f"Error: specified directory path does not exist"
+                self.logger.error(error_detail)
         except Exception as exception:
-            error_detail = "failed to list files at {}: {}".format(dir_path, exception)
+            error_detail = f"failed to list files at {dir_path}: {exception}"
             self.logger.error(error_detail)
-            status = False
         return status, error_detail, file_list
 
 

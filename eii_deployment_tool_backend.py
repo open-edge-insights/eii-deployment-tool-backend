@@ -775,7 +775,7 @@ def list_files(list_files_info: ListFilesInfo,
     :rtype Response200
     """
     _ = token
-    status, error_detail,data = util.scan_dir(util.EII_DIR + list_files_info.path)
+    status, error_detail, data = util.scan_dir(util.EII_DIR + list_files_info.path)
     response = util.make_response_json(status, data, error_detail)
     return response
 
