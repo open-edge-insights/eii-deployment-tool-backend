@@ -28,7 +28,6 @@ import uvicorn
 from starlette.status import (HTTP_403_FORBIDDEN, HTTP_404_NOT_FOUND)
 from starlette.responses import StreamingResponse
 from fastapi import FastAPI, HTTPException, Depends
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from libs.project import Project
@@ -942,13 +941,7 @@ if __name__ == '__main__':
         sys.exit(0)
 
     util.logger.info("Starting REST server...")
-    app.add_middleware(
-            CORSMiddleware,
-            allow_origins=["*"],
-            allow_credentials=True,
-            allow_methods=["GET", "POST"],
-            allow_headers=[]
-            )
+
     env_dev_mode = os.environ.get("dev_mode", "true")
     if env_dev_mode == "true":
         uvicorn.run(app, host="0.0.0.0", port=server_port)

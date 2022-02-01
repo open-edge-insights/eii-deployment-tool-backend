@@ -33,7 +33,24 @@ services:
         PYTHON_VERSION: ${PYTHON_VERSION}
     image: ia_eiibase:${EII_VERSION}
   ## Define DeploymentToolBackend service
+  ia_common:
+    depends_on:
+    - ia_eiibase
+    build:
+      context: $PWD/../common
+      dockerfile: $PWD/../common/dockerfiles/Dockerfile.common
+      args:
+        GO_VERSION: ${GO_VERSION}
+        EII_VERSION: ${EII_VERSION}
+        CMAKE_BUILD_TYPE: "Release"
+        CMAKE_INSTALL_PREFIX: ${EII_INSTALL_PATH}
+        RUN_TESTS: "OFF"
+        DOCKER_REGISTRY: ${DOCKER_REGISTRY}
+    image: ia_common:${EII_VERSION}
   deployment_tool_backend:
+    depends_on:
+    - ia_common
+    - ia_eiibase
     build:
       context: $PWD
       dockerfile: $PWD/Dockerfile
