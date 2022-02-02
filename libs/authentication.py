@@ -25,11 +25,13 @@ from fastapi import HTTPException, Depends
 from fastapi import status as HTTPStatus
 from fastapi.security import APIKeyCookie
 
+
 class Authentication():
     """ Class for grouping authentication related functions and data """
     tokens = {}
     SESSION_NAME = "dt_session"
     session_cookie = APIKeyCookie(name=SESSION_NAME)
+
     def __init__(self):
         pass
 
@@ -46,7 +48,6 @@ class Authentication():
         token = secrets.token_urlsafe(16)
         Authentication.tokens[token] = username
         return token
-
 
     @staticmethod
     def get_user_credentials(username, creds):

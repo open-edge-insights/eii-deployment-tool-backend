@@ -27,6 +27,7 @@ import logging
 import shlex
 from threading import Lock
 
+
 class Util:
     """
     Class for various generic utility functions
@@ -93,7 +94,6 @@ class Util:
         if error:
             self.logger.error(error)
 
-
     def load_file(self, path):
         """Reads a file and return its contents as utf-8 string
 
@@ -119,7 +119,6 @@ class Util:
             status = False
             error_detail = "failed to read file: [{}]: {}".format(path, exception)
         return status, error_detail, data
-
 
     def store_file(self, path, data, overwrite=False):
         """Writes the specified data to file
@@ -151,7 +150,8 @@ class Util:
                     filehandle.write(data.decode(Util.ENCODING))
                 else:
                     status = False
-                    error_detail = "Internal error: Unhandled type: {}".format(type(data))
+                    error_detail = "Internal error: Unhandled type: {}".format(
+                        type(data))
                     self.logger.error(error_detail)
         except Exception as exception:
             status = False
@@ -159,7 +159,6 @@ class Util:
             self.logger.error(error_detail)
 
         return status, error_detail
-
 
     def get_consolidated_config(self, path=None):
         """Get specified/current config data
@@ -191,7 +190,6 @@ class Util:
 
         return status, error_detail, eii_config
 
-
     def store_consolidated_config(self, config, path=None):
         """Write config data to the specified/current config file
 
@@ -214,7 +212,6 @@ class Util:
             self.logger.error(error_detail)
 
         return status, error_detail
-
 
     def os_command(self, cmd):
         """Execute an os command and return the output
@@ -240,7 +237,6 @@ class Util:
             error_detail = "error while executing {}: {}".format(cmd, exception)
             self.logger.error(error_detail)
         return status, error_detail, out.decode(Util.ENCODING)
-
 
     def os_command_in_host(self, cmd, output=False):
         """Execute a shell command in hist machine and return the output
@@ -277,7 +273,6 @@ class Util:
             self.logger.error(error_detail)
         return status, error_detail, out_str
 
-
     def scan_dir(self, dir_path):
         """Returns the list of files and directories in the specified path
 
@@ -308,7 +303,6 @@ class Util:
             self.logger.error(error_detail)
         return status, error_detail, file_list
 
-
     @staticmethod
     def get_state():
         """Method to get the current state information
@@ -324,8 +318,7 @@ class Util:
         """Method to check if already a task in progress
 
         """
-        return  Util.state_info[Util.STATUS] == Util.IN_PROGRESS
-
+        return Util.state_info[Util.STATUS] == Util.IN_PROGRESS
 
     @staticmethod
     def set_state(task, progress, status=IN_PROGRESS):
@@ -342,7 +335,6 @@ class Util:
             Util.state_info[Util.STATUS] = status
         Util.state_mutex.release()
         return True
-
 
     def make_response_json(self, status, data, error_detail):
         """Common function for creating the response object for all the APIs

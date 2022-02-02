@@ -24,8 +24,12 @@ import os
 import json
 from .util import Util
 
+
 class Project():
-    """ The projects module contain classes to manage projects in the Deployment tool """
+    """
+    The projects module contain classes to manage projects
+    in the Deployment tool
+    """
 
     def __init__(self):
         pass
@@ -55,7 +59,6 @@ class Project():
 
         return status, error_detail, config
 
-
     def do_create_project(self, name, replace):
         """Create config file for the current unsaved project
 
@@ -81,7 +84,6 @@ class Project():
             status, error_detail = util.store_file(path, json.dumps(config))
         return status, error_detail
 
-
     def do_store_project(self, name, show_wv):
         """Create config file for the current unsaved project
 
@@ -103,7 +105,6 @@ class Project():
             status, error_detail = util.store_consolidated_config(config, path)
         return status, error_detail
 
-
     def do_list_projects(self):
         """Get list of project files
 
@@ -120,7 +121,8 @@ class Project():
         util = Util()
         status, error_detail, dir_info = util.scan_dir(util.EII_PROJECTS_PATH)
         if status:
-            projects = [ p[:-5] for p in dir_info["files"] if p.endswith(util.JSON_EXT) ]
+            projects = [p[:-5] for p in dir_info["files"] if p.endswith(
+                util.JSON_EXT)]
         else:
             projects = None
         return status, error_detail, projects

@@ -27,6 +27,7 @@ from threading import Thread, Lock, Condition
 import cv2
 from .util import Util
 
+
 class Camera:
     """
     Class for managing camera streaming
@@ -39,7 +40,8 @@ class Camera:
         self.util = Util()
         self.BUFF_SIZE = 30
 
-    def resize_image(self, image, width=None, height=None, method=cv2.INTER_AREA):
+    def resize_image(self, image, width=None, height=None,
+                     method=cv2.INTER_AREA):
         """Function to resize an image
 
         :param image: imagedata
@@ -68,7 +70,6 @@ class Camera:
         new_image = cv2.resize(image, new_size, interpolation=method)
         return new_image
 
-
     def is_alive(self, device):
         """Safely checks if the thread corresponding to the specified
            camera device is alive/running or not
@@ -82,7 +83,6 @@ class Camera:
         alive = self.device_threads[device][Util.ALIVE]
         self.mutex.release()
         return alive
-
 
     def streamer_thread(self, device, image_width=None, image_height=None):
         # pylint disable=useless-return
@@ -112,7 +112,7 @@ class Camera:
                 (_, encoded_image) = cv2.imencode(".jpg", frame)
                 if encoded_image is None:
                     self.util.logger.info("Warning: encoding image -> " \
-                            "jpeg failed. Skipping frame")
+                        "jpeg failed. Skipping frame")
                     continue
                 # Convert to byte array along with headers for streaming
                 bframe = b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' +  \
@@ -145,7 +145,6 @@ class Camera:
                 self.mutex.release()
             self.util.logger.error("Error while streaming camera %s: %s",
                                    device, exception)
-
 
     def read_frame(self, device):
         """ Grabs frame from the queue and yields it for streaming
@@ -205,9 +204,9 @@ class Camera:
                 dts[device][Util.CONDITION] = Condition()
                 dts[device][Util.THREAD].start()
             else:
-                self.util.logger.info("Warning: camera device %s already running", device)
+                self.util.logger.info("Warning: camera device %s \
+                    already running", device)
         self.mutex.release()
-
 
     def stop(self, devices):
         """Stops the specified cameras
@@ -238,7 +237,6 @@ class Camera:
                     del self.device_threads[device]
                 self.mutex.release()
 
-
     def get_status(self, devices=None):
         """ Gets the current status of all provided camera devices
 
@@ -266,7 +264,6 @@ class Camera:
                     camera_status[device] = {"status": "Not Running"}
         self.mutex.release()
         return camera_status
-
 
     def parse_v4l2_ctrl_list(self, text):
         """ Parses output of v4l2-ctl -l
@@ -298,7 +295,6 @@ class Camera:
             self.util.logger.error(error_detail)
         return status, error_detail, data
 
-
     def set_config(self, configs):
         """ Sets the configurations for specified camera devices
 
@@ -322,7 +318,6 @@ class Camera:
                         device, param, params[param], error_detail)
         return status, error_detail
 
-
     def get_config(self, configs):
         """ Gets the configurations for specified camera devices
 
@@ -335,7 +330,8 @@ class Camera:
         error_detail = ""
         failed_devices = []
         for device in configs:
-            status, error_detail, result = self.util.os_command("v4l2-ctl -d {} -l".format(device))
+            status, error_detail, result = self.util.os_command(
+                "v4l2-ctl -d {} -l".format(device))
             self.util.logger.info("v4l2-ctl result: %s", result)
             if status is False:
                 data[device] = {}
@@ -362,7 +358,6 @@ class Camera:
                     "Failed to validate params for device %s: %s",
                     device, exception)
                 break
-
 
         if failed_devices:
             status = False

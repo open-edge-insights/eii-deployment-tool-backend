@@ -29,6 +29,7 @@ import yaml
 from eiiutil.util import Util as EiiUtil
 from .util import Util
 
+
 class Builder:
     """This class will have functions related to build and deploy
 
@@ -38,7 +39,6 @@ class Builder:
         self.threads = {Util.BUILD: {}, Util.DEPLOY: {}}
         for key in self.threads:
             self.threads[key][Util.ALIVE] = False
-
 
     def create_usecase_yml_file(self, components, path):
         """Creates a usecase yml file
@@ -65,7 +65,6 @@ class Builder:
             status = False
         return status, error_detail
 
-
     def merge_interfaces(self, target, source):
         """merge interfaces definitions
 
@@ -83,7 +82,6 @@ class Builder:
                 for intf in source[intf_type]:
                     if intf not in target[intf_type]:
                         target[intf_type].append(source[intf_type])
-
 
     def do_generate_config(self, components, instances, dev_mode, reset):
         """Generate the consolidated config file
@@ -156,7 +154,6 @@ class Builder:
             status, error_detail = self.util.store_consolidated_config(new_config)
         return status, error_detail, new_config
 
-
     def do_get_config(self, components):
         """Generate the consolidated config file
 
@@ -193,7 +190,6 @@ class Builder:
                     break
 
         return status, error_detail, config
-
 
     def do_set_config(self, config):
         """Updates the consolidated config file, with the provided config
@@ -239,7 +235,6 @@ class Builder:
             status = False
         return status, error_detail
 
-
     def update_env_file(self, path, key, value):
         """Updates an env file with 'key=value' pairs
 
@@ -273,7 +268,6 @@ class Builder:
             error_detail = f"error: FAILED to update env file: {exception}"
         return status, error_detail
 
-
     def get_services_from_docker_compose_yml(self, yml):
         """Get list of services from specified docker-compose.yml file
 
@@ -302,7 +296,6 @@ class Builder:
             self.util.logger.error(error_detail)
         return status, error_detail, services
 
-
     def builder_thread(self, services, sequential, no_cache):
         """Thread for building
 
@@ -319,7 +312,7 @@ class Builder:
             sequential = True
         elif sequential:
             status, error_out, services_list = \
-                self.get_services_from_docker_compose_yml(self.util.EII_BUILD_PATH + \
+                self.get_services_from_docker_compose_yml(self.util.EII_BUILD_PATH +
                         '/docker-compose-build.yml')
             if status is False:
                 self.util.logger.error("Build FAILED: failed to parse yml file: %s",
@@ -372,7 +365,6 @@ class Builder:
         Util.set_state(Util.BUILD, 100, "Success")
         self.threads[Util.BUILD][Util.ALIVE] = False
 
-
     def do_build(self, services, sequential, no_cache):
         """Do build
 
@@ -398,7 +390,6 @@ class Builder:
         self.threads[Util.BUILD][Util.ALIVE] = True
         self.threads[Util.BUILD][Util.THREAD].start()
         return True, "", ""
-
 
     def deployer_thread(self, images, ip_address, username, password, path):
         """Thread for deploying
@@ -450,7 +441,6 @@ class Builder:
         Util.set_state(Util.DEPLOY, 100, "Success")
         self.threads[Util.DEPLOY][Util.ALIVE] = False
 
-
     def do_deploy(self, images, ip_address, username, password, path):
         """Do deploy
 
@@ -481,7 +471,6 @@ class Builder:
         self.threads[Util.DEPLOY][Util.THREAD].start()
         return True, ""
 
-
     def do_get_logs_base64(self, tasks):
         """Get logs for the specified tasks
 
@@ -510,7 +499,6 @@ class Builder:
                 continue
             logs[task] = base64.b64encode(bytes(data, Util.ENCODING)).decode(Util.ENCODING)
         return True, "", logs
-
 
     def do_generate_udf_config(self, path):
         """Generate config for the specified UDF path
@@ -590,7 +578,6 @@ class Builder:
             return False, error_detail, {}
         return True, "", config
 
-
     def get_eii_containers_list(self):
         """Get list of all eii containers in the system
 
@@ -605,7 +592,6 @@ class Builder:
             for cont in conts.splitlines():
                 cont_list = cont_list + " " + cont
         return cont_list
-
 
     def do_run(self, action):
         """Start/stop/restart containers in the usecase
