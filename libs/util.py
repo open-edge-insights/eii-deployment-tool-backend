@@ -26,6 +26,7 @@ import subprocess as sp
 import logging
 import shlex
 from threading import Lock
+import re
 
 
 class Util:
@@ -238,6 +239,11 @@ class Util:
             self.logger.error(error_detail)
         return status, error_detail, out.decode(Util.ENCODING)
 
+
+    def filter_log(self, cmd):
+        new_out = re.sub('".*"' ,"'*****'", cmd)
+        return new_out
+
     def os_command_in_host(self, cmd, output=False):
         """Execute a shell command in hist machine and return the output
         :param cmd: shell command
@@ -252,7 +258,8 @@ class Util:
         out_str = ""
         status = False
         error_detail = ""
-        self.logger.debug(cmd)
+        log_cmd = self.filter_log(cmd)
+        self.logger.debug(log_cmd)
         try:
             remote_cmd = 'ssh -o "StrictHostKeyChecking=no" -i {} {}@{} "{}"'.format(
                 Util.SSH_KEY_PATH, self.host_user, self.HOST_IP, cmd)
