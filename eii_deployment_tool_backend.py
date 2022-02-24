@@ -281,7 +281,7 @@ class ComponentInfo(BaseModel):  # pylint: disable=too-few-public-methods
         """example data """
         schema_extra = {
             "example": {
-                "names": ["VideoIngestion", "VideoAnalytics"],
+                "names": ["EtcdUI", "ConfigMgrAgent", "VideoIngestion", "VideoAnalytics"],
                 "instance_count": 2,
                 "dev_mode": True,
                 "reset": True

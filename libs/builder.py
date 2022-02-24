@@ -614,15 +614,14 @@ class Builder:
 
         conts = self.get_eii_containers_list()
         stop = f"docker stop {conts} && docker rm {conts};" if conts else ""
-        up = "docker-compose up -d"
         path = self.util.host_eii_dir + "build"
 
         if action == Util.START:
-            cmd = f"cd {path} && {up} ia_configmgr_agent && sleep 30 && {up}"
+            cmd = f"cd {path} && ./eii_start.sh"
         elif action == Util.STOP:
             cmd = f"{stop}"
         elif action == Util.RESTART:
-            cmd = f"{stop} cd {path} && {up} ia_configmgr_agent && sleep 30 && {up}"
+            cmd = f"cd {path} && ./eii_start.sh"
 
         if cmd == "":
             self.util.logger.debug("No remote command to execute")
