@@ -6,3 +6,4 @@ jsonmerge==1.8.0
 six==1.16.0
 opencv-contrib-python==4.5.3.56
 imutils==0.5.4
+jsonschema==4.0.0

@@ -26,7 +26,8 @@ import base64
 from threading import Thread
 from string import digits
 import yaml
-from eiiutil.util import Util as EiiUtil
+from jsonschema import validate
+from jsonschema.exceptions import ValidationError, SchemaError
 from .util import Util
 
 
@@ -215,20 +216,25 @@ class Builder:
                     service_dir = service.rstrip(digits)
                     _, _, schema = self.util.load_file(
                         self.util.EII_DIR + service_dir + "/schema.json")
-                    # A bug in platform causes VA validation to always fail
-                    # This hack avoids validation for VA.
-                    # TODO: remove this hack when issue is fixed in platform
-                    if service_dir != "VideoAnalytics" and \
-                        schema and not EiiUtil.validate_json(
-                        schema, json.dumps(config[service]["config"])):
+                    try:
+                        validate(config[service]["config"], json.loads(schema))
+                        eii_config[f"/{service}/config"] = config[service]["config"]
+                        eii_config[f"/{service}/interfaces"] = config[service]["interfaces"]
+                    except (ValidationError, SchemaError) as ex:
+                        error_desc = f"Schema validation failed for {service}"
+                        error_detail = f"{ex}"
                         status = False
-                        error_detail = f"Schema validation failed for {service}"
-                        self.util.logger.error(error_detail)
                         break
-                    eii_config[f"/{service}/config"] = config[service]["config"]
-                    eii_config[f"/{service}/interfaces"] = config[service]["interfaces"]
+                    except Exception as ex:
+                        error_desc = f"Exception while validating Schema for {service}"
+                        error_detail = f"{ex}"
+                        status = False
+                        break
                 if status:
                     status, error_detail = self.util.store_consolidated_config(eii_config)
+                else:
+                    self.util.logger.error(error_desc)
+                    self.util.logger.debug("Error detail: %s", error_detail)
         except Exception as exception:
             error_detail = f"Exception while updating EII config: {exception}"
             self.util.logger.error(error_detail)
