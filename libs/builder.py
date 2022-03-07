@@ -412,10 +412,42 @@ class Builder:
         :type path: str
 
         """
+        Util.set_state(Util.DEPLOY, 0)
+        # Copy build folder to remote
+        status, error_out, _ = self.util.os_command(
+            'sshpass -p "{}" rsync -r -e "ssh -o StrictHostKeyChecking=no" -z {} {}@{}:{}'
+            .format(password, Util.EII_BUILD_PATH[:-1], username, ip_address, path))
+        if status is False:
+            Util.set_state(Util.DEPLOY, 0, "Failed")
+            self.util.logger.error("Deploy FAILED: Reason: %s", error_out)
+            self.threads[Util.DEPLOY][Util.ALIVE] = False
+            return
+        # Create udf folder at remote
+        status, error_out, _ = self.util.os_command(
+            'sshpass -p "{}" ssh -o "StrictHostKeyChecking=no" {}@{} mkdir -p {}/common/video'
+            .format(password, username, ip_address, path))
+        if status is False:
+            Util.set_state(Util.DEPLOY, 0, "Failed")
+            self.util.logger.error(
+                "Deploy FAILED: Reason: Failed to create %s/common/video/ on remote machine",
+                path)
+            self.threads[Util.DEPLOY][Util.ALIVE] = False
+            return
+        # Copy udfs folder to remote
+        status, error_out, _ = self.util.os_command(
+            'sshpass -p "{}" rsync -r -e "ssh -o StrictHostKeyChecking=no" -z {}/common/video/udfs {}@{}:{}/common/video/'
+            .format(password, Util.EII_DIR, username, ip_address, path))
+        if status is False:
+            Util.set_state(Util.DEPLOY, 0, "Failed")
+            self.util.logger.error(
+                "Deploy FAILED: Reason: Failed to copy udfs to %s/common/video/udfs on remote machine",
+                path)
+            self.threads[Util.DEPLOY][Util.ALIVE] = False
+            return
 
         # export images to remote machine
         n_images = len(images)
-        i = 0
+        i = 1
         for image in images:
             if not self.threads[Util.DEPLOY][Util.ALIVE]:
                 break
@@ -433,15 +465,6 @@ class Builder:
 
         if not self.threads[Util.DEPLOY][Util.ALIVE]:
             Util.set_state(Util.DEPLOY, 0, "Failed")
-            return
-
-        status, error_out, _ = self.util.os_command(
-            'sshpass -p "{}" rsync -r -e "ssh -o StrictHostKeyChecking=no" -z {} {}@{}:{}'
-            .format(password, Util.EII_BUILD_PATH[:-1], username, ip_address, path))
-        if status is False:
-            Util.set_state(Util.DEPLOY, 0, "Failed")
-            self.util.logger.error("Deploy FAILED: Reason: %s", error_out)
-            self.threads[Util.DEPLOY][Util.ALIVE] = False
             return
 
         Util.set_state(Util.DEPLOY, 100, "Success")
