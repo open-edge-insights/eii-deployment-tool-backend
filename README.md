@@ -1,96 +1,117 @@
-**Contents**
+# Contents
 
-# Running Deployment tool backend
+## Run the Web Deployment Tool back end
 
-## Prerequisites
-    
-   Please ensure that all the pre-requisites needed for EII are installed. Please refer to [EII README](https://github.com/open-edge-insights/eii-core/blob/master/README.md) for more details.
+Web Deployment Tool (WDT) provides a graphical interface to set up and complete the deployment process for OEI services. The following sections provide details for the prerequisites and configuration for the Web GUI Deployment tool back end.
 
-## Configuration
+> **Note:** In this document, you will find labels of 'Edge Insights for Industrial (EII)' for filenames, paths, code snippets, and so on. Consider the references of EII as Open Edge Insights (OEI). This is due to the product name change of EII as OEI.
 
-  * The backend server will run on the port defined at the env variable DEPLOYMENT_TOOL_BACKEND_PORT in docker-compose.yml
-  * The backend server will run in dev mode (http/insecure) or prod mode (https/secure) depending on the env variable 'dev_mode' in docker-compose.yml.
-    By default prod mode is enabled.
+### Prerequisites
 
-    ```
-    dev_mode: "false"
-    ```
-  * Logging can be configured by setting the env variable LOG_LEVEL in docker-compose.yml.
+Ensure that all the prerequisites for OEI are installed. For more details, refer to the [OEI ReadMe](https://github.com/open-edge-insights/eii-core/blob/master/README.md).
 
-    ```
-    LOG_LEVEL: "INFO"
-    ```
-    The following log levels are supported:
+### Configuration
 
-    * DEBUG
-    * INFO
-    * ERROR
+The back-end server runs on the port value that you enter for the env variable `DEPLOYMENT_TOOL_BACKEND_PORT` in the `docker-compose.yml` file. Also, based on the value for the env variable `dev_mode` in the `docker-compose.yml` file, the back-end server will run in the `DEV mode` (http/insecure) or the `PROD mode` (https/secure). By default, the PROD mode is enabled. The following snippet shows the default value for the env variable `env_mode`:
 
-  * Users must provide the desired user credentials in the file ./creds.json.
-    The same credentials should be provided in the frontend, to login to the tool.
-    Please note that users won't be able to login to the backend without providing credentials in the above mentioned file, in proper json format as shown below:
-    
-    ```
-    {
-        "username" : "password"
-    }
-    ```
+```sh
+dev_mode: "false"
+```
 
-## Running the tool
+#### Configure Logging
 
-  * **Steps to run the tool**
+Web Deployment Tool supports the following log levels:
 
-    * **To simply run the container (without building)**:
+- Debug
+- Info
+- Error
 
-      ```shell
-      $ cd [WORKDIR]/IEdgeInsights/DeploymentToolBackend
-      $ ./run.sh
-      ```
+In the `docker-compose.yml` file, you can set the env variable `LOG_LEVEL` to configure logging. Refer to the following code snippet:
 
-    * **To build and run**:
-      ```shell
-      $ ./run.sh --build
-      ```
-       or
-      ```shell
-      $ ./run.sh -b
-      ```
+```sh
+  LOG_LEVEL: "INFO"
+```
 
-      To build & run with --no-cache or to provide any other build argument, just append the same after the above commands.
+>**Note:**
+> You must enter your user credentials in the `./creds.json` file to log in to the Web Deployment Tool's back end. You must use the same user credentials to access the frontend of the Web Deployment tool. Refer to the following code snippet for the JSON format of the user credentials:
 
-      for e.g. 
+```sh
+ {
+  "username" : "password"
+ }
+```
 
-      ```shell
-      $ ./run.sh --build --no-cache
-      ```
-      Note: If you are building the container for the first time, it may prompt you for the host user password and also credentials for SSH key generation. The host user will then be added to sudoers with NOPASSWORD option. This is for the container to seemlessly interact with the host.
+## Run the Web Deployment Tool
 
-    * **To restart the container:**
+Perform the steps mentioned in this section to run the Web Deployment Tool.
 
-      ```shell
-      $ ./run.sh --restart
-      ```
-       or
-      ```shell
-      $ ./run.sh -r
-      ```
+### Run the container without building
 
-    * **To bring down the container:**
+To run the container without building it, run the following commands:
 
-      ```shell
-      $ ./run.sh --down
-      ```
-       or
-      ```shell
-      $ ./run.sh -d
-      ```
-      
-## API Documentation
+```shell
+cd [WORKDIR]/IEdgeInsights/DeploymentToolBackend
+./run.sh
+```
 
-  The tool auto-generates OpenAPI documentation for all the REST APIs it exposes.
-  This documentation can be accessed at its **/docs** endpoint.
+### Build and run the container
 
-  for e.g.
-    ```
-    https://127.0.0.1:5100/docs
-    ```
+To build and run the container, run the following commands:
+
+```shell
+./run.sh --build
+```
+
+or
+
+```shell
+./run.sh -b
+```
+
+To build and run with --no-cache or to provide any other build argument, you can append the build argument after running the previous commands.
+
+For example:
+
+```shell
+./run.sh --build --no-cache
+```
+
+>**Note:** If you are building the container for the first time, the Web Deployment Tool will prompt you for the host credentials and the credentials for the SSH key generation. The host user is then added to the sudoers with the NOPASSWORD option. This is for the container to seemlessly interact with the host.
+
+### Restart the container
+
+Run any the following commands to restart the container:
+
+```shell
+./run.sh --restart
+```
+
+or
+
+```shell
+./run.sh -r
+```
+
+### Bring down the container
+
+Run any of the following commands to bring down the container:
+
+```shell
+./run.sh --down
+```
+
+or
+
+```shell
+./run.sh -d
+```
+
+## Web Deployment Tool API Documentation
+
+The Web Deployment Tool auto-generates the OpenAPI documentation for all the REST APIs it exposes. This documentation can be accessed at its **/docs** endpoint.
+
+For example:
+
+```sh
+https://127.0.0.1:5100/docs
+```
