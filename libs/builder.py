@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Intel Corporation.
+# Copyright (c) 2022 Intel Corporation.
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -65,8 +65,8 @@ class Builder:
             self.util.logger.error(error_detail)
             status = False
         return status, error_detail
-
-    def merge_interfaces(self, target, source):
+        
+    def merge_interfaces(self, component, new_config, old_config):
         """merge interfaces definitions
 
         :param target: target interface list
@@ -74,6 +74,8 @@ class Builder:
         :param source: source interface list
         :type source: [dict]
         """
+        source = old_config[component]
+        target = new_config[component]
         intf_types = ["Publishers", "Subscribers", "Servers", "Clients"]
         for intf_type in intf_types:
             if intf_type in source:
@@ -81,8 +83,10 @@ class Builder:
                     target[intf_type] = source[intf_type]
                     continue
                 for intf in source[intf_type]:
-                    if intf not in target[intf_type]:
-                        target[intf_type].append(source[intf_type])
+                    if intf not in target[intf_type] and \
+                        (intf_type in ["Publishers", "Servers"] or \
+                        "/" + intf["PublisherAppName"] + "/interfaces" in new_config):
+                        target[intf_type].append(intf)
 
     def do_generate_config(self, components, instances, dev_mode, reset):
         """Generate the consolidated config file
@@ -150,7 +154,7 @@ class Builder:
                     if component.endswith("/config"):
                         new_config[component] = old_config[component]
                     elif component.endswith("/interfaces"):
-                        self.merge_interfaces(new_config[component], old_config[component])
+                        self.merge_interfaces(component, new_config, old_config)
 
             status, error_detail = self.util.store_consolidated_config(new_config)
         return status, error_detail, new_config

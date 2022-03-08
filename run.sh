@@ -45,9 +45,11 @@ function setupHost() {
     conts=$(docker ps -qaf name=ia_*)
     if ! [ -z "$conts" ];then
         echo "Stopping and removing all EII containers..."
-        docker stop $conts
-        docker rm $conts
+        docker stop $(docker ps -qf name=ia_*)
+        docker rm $(docker ps -qaf name=ia_*)
     fi
+    echo "Bringing down all unused docker networks..."
+    docker network prune -f
 }
 
 
@@ -87,10 +89,10 @@ function check_certs() {
 sourceEnv
 
 if [ "$1" ==  "--build" -o "$1" == "-b" ]; then
-    create_docker_network && \
-    check_certs && \
     docker-compose down && \
     setupHost && \
+    create_docker_network && \
+    check_certs && \
     docker-compose build $2 && \
     docker-compose up -d
 elif [ "$1" ==  "--restart" -o "$1" == "-r" ]; then
