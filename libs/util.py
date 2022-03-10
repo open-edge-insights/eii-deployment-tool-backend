@@ -214,6 +214,10 @@ class Util:
 
         return status, error_detail
 
+    def filter_log(self, cmd):
+        new_out = re.sub('".*"' ,"'*****'", cmd)
+        return new_out
+
     def os_command(self, cmd):
         """Execute an os command and return the output
         :param cmd: shell command
@@ -225,7 +229,8 @@ class Util:
         :return: command output
         :rtype: str
         """
-        self.logger.debug("CMD: %s", cmd)
+        log_cmd = self.filter_log(cmd)
+        self.logger.debug("CMD: %s", log_cmd)
         out = b''
         status = False
         error_detail = ""
@@ -234,15 +239,11 @@ class Util:
                 shlex.split(cmd),
                 shell=False)
             status = True
-        except Exception as exception:
-            error_detail = "error while executing {}: {}".format(cmd, exception)
+        except Exception:
+            error_detail = f"error while executing {log_cmd}"
             self.logger.error(error_detail)
         return status, error_detail, out.decode(Util.ENCODING)
 
-
-    def filter_log(self, cmd):
-        new_out = re.sub('".*"' ,"'*****'", cmd)
-        return new_out
 
     def os_command_in_host(self, cmd, output=False):
         """Execute a shell command in hist machine and return the output
@@ -275,8 +276,8 @@ class Util:
                     shell=True, stdin=sp.DEVNULL, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
                 out_str = str(out)
                 status = True if out == 0 else False
-        except Exception as exception:
-            error_detail = "error while executing {}: {}".format(cmd, exception)
+        except Exception:
+            error_detail = f"error while executing {log_cmd}"
             self.logger.error(error_detail)
         return status, error_detail, out_str
 

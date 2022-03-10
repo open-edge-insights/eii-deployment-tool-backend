@@ -65,7 +65,7 @@ class Builder:
             self.util.logger.error(error_detail)
             status = False
         return status, error_detail
-        
+
     def merge_interfaces(self, component, new_config, old_config):
         """merge interfaces definitions
 
@@ -401,7 +401,7 @@ class Builder:
         self.threads[Util.BUILD][Util.THREAD].start()
         return True, "", ""
 
-    def deployer_thread(self, images, ip_address, username, password, path):
+    def deployer_thread(self, images, ip_address, username, user_p, path):
         """Thread for deploying
 
         :param images: List of docker images to be deployed
@@ -410,8 +410,8 @@ class Builder:
         :type ip_address: str
         :param username: Remote machine username
         :type username: str
-        :param password: Remote machine password
-        :type password: str
+        :param user_p: Remote machine password
+        :type user_p: str
         :param path: Remote machine directory path where files need to be copied
         :type path: str
 
@@ -420,7 +420,7 @@ class Builder:
         # Copy build folder to remote
         status, error_out, _ = self.util.os_command(
             'sshpass -p "{}" rsync -r -e "ssh -o StrictHostKeyChecking=no" -z {} {}@{}:{}'
-            .format(password, Util.EII_BUILD_PATH[:-1], username, ip_address, path))
+            .format(user_p, Util.EII_BUILD_PATH[:-1], username, ip_address, path))
         if status is False:
             Util.set_state(Util.DEPLOY, 0, "Failed")
             self.util.logger.error("Deploy FAILED: Reason: %s", error_out)
@@ -429,7 +429,7 @@ class Builder:
         # Create udf folder at remote
         status, error_out, _ = self.util.os_command(
             'sshpass -p "{}" ssh -o "StrictHostKeyChecking=no" {}@{} mkdir -p {}/common/video'
-            .format(password, username, ip_address, path))
+            .format(user_p, username, ip_address, path))
         if status is False:
             Util.set_state(Util.DEPLOY, 0, "Failed")
             self.util.logger.error(
@@ -439,12 +439,14 @@ class Builder:
             return
         # Copy udfs folder to remote
         status, error_out, _ = self.util.os_command(
-            'sshpass -p "{}" rsync -r -e "ssh -o StrictHostKeyChecking=no" -z {}/common/video/udfs {}@{}:{}/common/video/'
-            .format(password, Util.EII_DIR, username, ip_address, path))
+            'sshpass -p "{}" rsync -r -e "ssh -o StrictHostKeyChecking=no" '
+            '-z {}/common/video/udfs {}@{}:{}/common/video/'
+            .format(user_p, Util.EII_DIR, username, ip_address, path))
         if status is False:
             Util.set_state(Util.DEPLOY, 0, "Failed")
             self.util.logger.error(
-                "Deploy FAILED: Reason: Failed to copy udfs to %s/common/video/udfs on remote machine",
+                'Deploy FAILED: Reason: Failed to copy udfs to '
+                '%s/common/video/udfs on remote machine',
                 path)
             self.threads[Util.DEPLOY][Util.ALIVE] = False
             return
@@ -458,7 +460,7 @@ class Builder:
             status, error_out, _ = self.util.os_command_in_host(
                 'docker save {} | bzip2 | sshpass -p "{}" ssh -o '
                 'StrictHostKeyChecking=no {}@{} docker load'.format(
-                    image, password, username, ip_address))
+                    image, user_p, username, ip_address))
             if status is False:
                 Util.set_state(Util.DEPLOY, 0, "Failed")
                 self.util.logger.error("Deploy FAILED: Reason: %s", error_out)
@@ -474,7 +476,7 @@ class Builder:
         Util.set_state(Util.DEPLOY, 100, "Success")
         self.threads[Util.DEPLOY][Util.ALIVE] = False
 
-    def do_deploy(self, images, ip_address, username, password, path):
+    def do_deploy(self, images, ip_address, username, user_p, path):
         """Do deploy
 
         :param images: List of docker images to be deployed
@@ -483,8 +485,8 @@ class Builder:
         :type ip_address: str
         :param username: Remote machine username
         :type username: str
-        :param password: Remote machine password
-        :type password: str
+        :param user_p: Remote machine password
+        :type user_p: str
         :param path: Remote machine directory path where files need to be copied
         :type path: str
         :return: status of operation
@@ -499,7 +501,7 @@ class Builder:
         self.util.logger.info("Deploying...")
         self.threads[Util.DEPLOY][Util.THREAD] = Thread(
             target=self.deployer_thread,
-            args=(images, ip_address, username, password, path))
+            args=(images, ip_address, username, user_p, path))
         self.threads[Util.DEPLOY][Util.ALIVE] = True
         self.threads[Util.DEPLOY][Util.THREAD].start()
         return True, ""
