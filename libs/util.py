@@ -262,18 +262,19 @@ class Util:
         log_cmd = self.filter_log(cmd)
         self.logger.debug(log_cmd)
         try:
-            remote_cmd = 'ssh -o "StrictHostKeyChecking=no" -i {} {}@{} "{}"'.format(
-                Util.SSH_KEY_PATH, self.host_user, self.HOST_IP, cmd)
+            remote_cmd = 'ssh -o StrictHostKeyChecking=no -i {} {}@{}'.format(
+                Util.SSH_KEY_PATH, self.host_user, self.HOST_IP).split()
+            remote_cmd.append(cmd)
             if output:
                 out = sp.check_output(
                     remote_cmd,
-                    shell=True)
+                    shell=False)
                 out_str = out.decode(Util.ENCODING)
                 status = True
             else:
                 out = sp.call(
                     remote_cmd,
-                    shell=True, stdin=sp.DEVNULL, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
+                    shell=False, stdin=sp.DEVNULL, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
                 out_str = str(out)
                 status = True if out == 0 else False
         except Exception:
